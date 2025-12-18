@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <title>Solpump Mini</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <script src="https://unpkg.com/@solana/web3.js@latest/lib/index.iife.js"></script>
+
+  <style>
+    body {
+      margin: 0;
+      background: #0b0f14;
+      color: #fff;
+      font-family: Arial, sans-serif;
+    }
+    .container {
+      max-width: 420px;
+      margin: auto;
+      padding: 20px;
+    }
+    h1 {
+      text-align: center;
+    }
+    .card {
+      background: #141a22;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    button {
+      width: 100%;
+      padding: 12px;
+      border-radius: 8px;
+      border: none;
+      font-size: 16px;
+      cursor: pointer;
+      background: #00ffa3;
+      color: #000;
+      margin-top: 10px;
+    }
+    input {
+      width: 100%;
+      padding: 10px;
+      border-radius: 8px;
+      border: none;
+      font-size: 16px;
+      margin-top: 8px;
+    }
+    .info {
+      font-size: 14px;
+      color: #aaa;
+      margin-top: 6px;
+    }
+    .big {
+      font-size: 20px;
+      font-weight: bold;
+      margin-top: 6px;
+    }
+  </style>
+</head>
+
+<body>
+<div class="container">
+
+  <h1>🚀 Solpump Mini</h1>
+
+  <!-- WALLET -->
+  <div class="card">
+    <button onclick="connectWallet()">Kết nối ví Phantom</button>
+    <div class="info" id="walletAddress">Chưa kết nối</div>
+  </div>
+
+  <!-- BUY POINTS -->
+  <div class="card">
+    <h3>Mua điểm</h3>
+    <div class="info">Tối thiểu 0.01 SOL — 1 SOL = 1000 điểm</div>
+
+    <input
+      id="solInput"
+      type="number"
+      min="0.01"
+      step="0.001"
+      placeholder="Nhập số SOL (vd: 0.06)"
+      oninput="previewPoints()"
+    />
+
+    <div class="big" id="pointPreview">0 điểm</div>
+
+    <button onclick="buySol()">Mua điểm</button>
+  </div>
+
+  <!-- STATS -->
+  <div class="card">
+    <h3>Thống kê</h3>
+    <div class="info">Tổng SOL đã nạp</div>
+    <div class="big" id="totalSol">0 SOL</div>
+
+    <div class="info">Tổng giải (50%)</div>
+    <div class="big" id="prizePool">0 SOL</div>
+  </div>
+
+</div>
+
+<script>
+  const { Connection, PublicKey, Transaction, SystemProgram } = solanaWeb3;
+
+  const connection = new Connection("https://api.mainnet-beta.solana.com");
+  const TREASURY = new PublicKey("11111111111111111111111111111111"); // thay sau
+  let wallet = null;
+
+  let totalSol = 0;
+
+  function connectWallet() {
+    if (!window.solana) {
+      alert("Cài Phantom trước");
+      return;
+    }
+
+    window.solana.connect().then(res => {
+      wallet = res.publicKey;
+      document.getElementById("walletAddress").innerText =
+        wallet.toString().slice(0, 6) + "..." + wallet.toString().slice(-4);
+    });
+  }
+
+  function previewPoints() {
+    const sol = parseFloat(document.getElementById("solInput").value);
+    if (!sol || sol < 0.01) {
+      document.getElementById("pointPreview").innerText = "0 điểm";
+      return;
+    }
+    document.getElementById("pointPreview").innerText =
+      Math.floor(sol * 1000) + " điểm";
+  }
+
+  async function buySol() {
+    if (!wallet) {
+      alert("Chưa kết nối ví");
+      return;
+    }
+
+    const sol = parseFloat(document.getElementById("solInput").value);
+    if (!sol || sol < 0.01) {
+      alert("Tối thiểu 0.01 SOL");
+      return;
+    }
+
+    const lamports = sol * solanaWeb3.LAMPORTS_PER_SOL;
+
+    const tx = new Transaction().add(
+      SystemProgram.transfer({
+        fromPubkey: wallet,
+        toPubkey: TREASURY,
+        lamports: lamports,
+      })
+    );
+
+    tx.feePayer = wallet;
+    tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+
+    const signed = await window.solana.signTransaction(tx);
+    const sig = await connection.sendRawTransaction(signed.serialize());
+    await connection.confirmTransaction(sig);
+
+    // Update stats (demo – backend làm sau)
+    totalSol += sol;
+    document.getElementById("totalSol").innerText = totalSol.toFixed(3) + " SOL";
+    document.getElementById("prizePool").innerText =
+      (totalSol * 0.5).toFixed(3) + " SOL";
+
+    alert("Mua điểm thành công");
+  }
+</script>
+</body>
+  </html>
