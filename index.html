@@ -1,104 +1,137 @@
 <!DOCTYPE html><html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Solpump Mini</title>
-<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-<style>
-  body{
-    margin:0;
-    font-family:Arial,Helvetica,sans-serif;
-    background:#050a24;
-    color:#fff;
-  }
-  .container{max-width:480px;margin:auto;padding:16px}
-  .card{background:#0b1445;border-radius:16px;padding:16px;margin-bottom:16px}
-  button{width:100%;padding:14px;border:none;border-radius:12px;font-size:16px;font-weight:bold;background:#1cff9b;color:#000}
-  input{width:100%;padding:12px;border-radius:10px;border:none;margin:8px 0}
-  .center{text-align:center}.history-row{display:flex;gap:8px;overflow-x:auto} .history-item{padding:6px 10px;border-radius:8px;background:#111a3d;white-space:nowrap;font-size:14px} .boom{color:#ff4d4d} .win{color:#19f7a5}
-
-.multiplier{font-size:48px;font-weight:bold;text-align:center;margin:16px 0} </style>
-
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Solpump Mini</title>
+  <style>
+    body{
+      margin:0;
+      font-family:Arial,Helvetica,sans-serif;
+      background:linear-gradient(180deg,#050b2e,#020617);
+      color:#fff;
+    }
+    .container{max-width:420px;margin:0 auto;padding:16px}
+    .card{background:#0b143f;border-radius:14px;padding:16px;margin-bottom:16px}
+    h1{margin:8px 0 16px 0}
+    button{
+      width:100%;
+      padding:14px;
+      border:none;
+      border-radius:10px;
+      font-size:16px;
+      font-weight:bold;
+      background:#1cff9a;
+      color:#000;
+    }
+    button.secondary{background:#1e293b;color:#fff}
+    input{
+      width:100%;
+      padding:12px;
+      border-radius:8px;
+      border:none;
+      margin:8px 0 12px 0;
+      font-size:15px;
+    }
+    .center{text-align:center}
+    .big{font-size:48px;font-weight:bold}
+    .hidden{display:none}
+    .history{display:flex;gap:8px;overflow-x:auto}
+    .history span{background:#111c55;padding:6px 10px;border-radius:8px;white-space:nowrap}
+  </style>
 </head>
 <body>
-<div class="container">  <h2>🚀 Solpump Mini</h2>  <div class="card">
+<div class="container">  <h1>🚀 Solpump Mini</h1>  <!-- CONNECT -->  <div class="card">
     <button id="connectBtn">Connect Phantom Wallet</button>
     <div id="wallet" style="margin-top:8px"></div>
-  </div>  <div class="card">
-    <div id="history" class="history-row"></div>
-  </div>  <div class="card">
-    <div class="multiplier" id="multiplier">1.00x</div>
-    <button onclick="enterGame()">ENTER GAME</button>
-  </div>  <div class="card" id="game" style="display:none">
-    <h3>💥 Crash Game</h3>
-    <button onclick="startGame()">START</button>
-    <button onclick="stopGame()" style="margin-top:8px">STOP</button>
-    <p>Your Points: <span id="points">0</span></p>
-  </div>  <div class="card">
+  </div>  <!-- PREVIEW (ALWAYS VISIBLE) -->  <div class="card center">
+    <div class="big" id="previewMultiplier">1.00x</div>
+    <button class="secondary" onclick="enterGame()">ENTER GAME</button>
+  </div>  <!-- LEADERBOARD -->  <div class="card">
+    <h3>🏆 Weekly Leaderboard</h3>
+    <div id="leaderboard">No data</div>
+  </div>  <!-- STAT -->  <div class="card">
     <h3>📊 Statistics</h3>
-    <p>Total Prize Pool: <span id="prize">0</span> SOL</p>
-  </div></div><script>
-// CONFIG
-const SYSTEM_WALLET = "H2yVMrEbexHFdsAMFQtBY3Lp3BBz6cu6VVJwyiommqxZ";
-const supabase = supabase.createClient(
-  "https://twnovzaygfpxydkzwzsd.supabase.co",
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR3bm92emF5Z2ZweHlka3p3enNkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYwMTU2MzEsImV4cCI6MjA4MTU5MTYzMX0.T5s5vqGPDXYqpr1kA85lh-2VF_rUdXg8YCutq0QZ5j4"
-);
+    Total Prize Pool: <span id="pool">0</span> SOL
+  </div>  <!-- GAME -->  <div class="card hidden" id="game"><div class="history" id="history"></div>
 
+<div class="center big" id="multiplier">1.00x</div>
+
+<button onclick="startGame()">START</button>
+<button class="secondary" onclick="stopGame()">STOP</button>
+
+<p>Your Points: <span id="points">0</span></p>
+
+<hr />
+
+<h4>Buy Points (In Game)</h4>
+<small>1 SOL = 1000 points | Min 0.01 SOL</small>
+<input id="buySol" placeholder="Enter SOL (ex: 0.05)" />
+<button onclick="buyPoints()">BUY POINTS</button>
+
+  </div></div><script>
 let wallet=null;
 let points=0;
-let running=false;
-let mult=1;
+let mult=1.0;
 let timer=null;
 let history=[];
 
-// WALLET
+const connectBtn=document.getElementById('connectBtn');
+const walletEl=document.getElementById('wallet');
+
 connectBtn.onclick=async()=>{
-  if(!window.solana?.isPhantom){alert("Open in Phantom browser");return}
-  const r=await solana.connect();
-  wallet=r.publicKey.toString();
-  walletEl.innerText="Wallet: "+wallet.slice(0,4)+"..."+wallet.slice(-4);
+  if(!window.solana||!window.solana.isPhantom){
+    alert('Open this site inside Phantom browser');return;
+  }
+  const res=await window.solana.connect();
+  wallet=res.publicKey.toString();
+  walletEl.innerText='Wallet: '+wallet.slice(0,4)+'...'+wallet.slice(-4);
 };
 
-// HISTORY
-function addHistory(x){
-  history.unshift(x);
-  history=history.slice(0,12);
-  historyEl.innerHTML=history.map(h=>{
-    let cls=h<2?"boom":"win";
-    return `<div class=\"history-item ${cls}\">${h.toFixed(2)}x</div>`;
-  }).join("");
+function enterGame(){
+  document.getElementById('game').classList.remove('hidden');
 }
 
-// GAME
-function enterGame(){document.getElementById('game').style.display='block'}
-
 function startGame(){
-  if(running)return;
-  running=true;
-  mult=1;
+  clearInterval(timer);
+  mult=1.0;
+  document.getElementById('multiplier').innerText=mult.toFixed(2)+'x';
   timer=setInterval(()=>{
-    mult+=Math.random()*0.08;
-    multiplier.innerText=mult.toFixed(2)+"x";
-    if(Math.random()<0.05+mult/50){crash()}
-  },100);
+    mult+=Math.random()*0.15;
+    document.getElementById('multiplier').innerText=mult.toFixed(2)+'x';
+    if(Math.random()<0.07){crash();}
+  },120);
 }
 
 function stopGame(){
-  if(!running)return;
+  clearInterval(timer);
   points+=Math.floor(mult*10);
-  pointsEl.innerText=points;
-  endRound();
+  document.getElementById('points').innerText=points;
+  history.unshift(mult.toFixed(2)+'x');
+  renderHistory();
 }
 
-function crash(){endRound()}
-
-function endRound(){
+function crash(){
   clearInterval(timer);
-  running=false;
-  addHistory(mult);
-  mult=1;
-  multiplier.innerText="1.00x";
+  history.unshift('💥 '+mult.toFixed(2)+'x');
+  renderHistory();
+}
+
+function renderHistory(){
+  const h=document.getElementById('history');
+  h.innerHTML='';
+  history.slice(0,10).forEach(v=>{
+    const s=document.createElement('span');
+    s.innerText=v;
+    h.appendChild(s);
+  });
+}
+
+function buyPoints(){
+  const sol=parseFloat(document.getElementById('buySol').value);
+  if(isNaN(sol)||sol<0.01){alert('Min 0.01 SOL');return;}
+  points+=Math.floor(sol*1000);
+  document.getElementById('points').innerText=points;
+  document.getElementById('buySol').value='';
 }
 </script></body>
 </html>
