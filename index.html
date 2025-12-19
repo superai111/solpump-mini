@@ -63,6 +63,9 @@ input {
   margin-top: 8px;
 }
 </style>
+
+<!-- Solana Web3 -->
+<script src="https://unpkg.com/@solana/web3.js@latest/lib/index.iife.min.js"></script>
 </head>
 
 <body>
@@ -92,15 +95,22 @@ input {
 
   <p>Your Points: <b id="points">0</b></p>
 
-  <button onclick="buyPoints()">NẠP POINT</button>
+  <button onclick="buyPoints()">NẠP POINT (SOL)</button>
 </div>
 
 </div>
 
 <script>
+/* ================== WALLET & SOL ================== */
+const SYSTEM_WALLET = "H2yVMrEbexHFdsAMFQtBY3Lp3BBz6cu6VVJwyiommqxZ";
+const connection = new solanaWeb3.Connection(
+  solanaWeb3.clusterApiUrl("mainnet-beta"),
+  "confirmed"
+);
+
 let wallet = null;
 
-// 🔹 LOAD POINT THỰC TẾ
+/* ================== GAME STATE ================== */
 let userPoints = Number(localStorage.getItem("userPoints") || 1000);
 
 let liveMultiplier = 1.0;
@@ -119,9 +129,10 @@ const MIN_RUN_TIME = 600; // ms
 
 updatePoints();
 
+/* ================== WALLET ================== */
 async function connectWallet() {
-  if (!window.solana) {
-    alert("Open inside Phantom");
+  if (!window.solana || !window.solana.isPhantom) {
+    alert("Vui lòng mở trang bằng Phantom Wallet");
     return;
   }
   const r = await window.solana.connect();
@@ -130,6 +141,7 @@ async function connectWallet() {
     "Wallet: " + wallet.slice(0,4) + "..." + wallet.slice(-4);
 }
 
+/* ================== GAME LOGIC ================== */
 function genCrash() {
   const r = Math.random();
   if (r < 0.55) return 1 + Math.random() * 0.4;
@@ -174,9 +186,7 @@ function startRound() {
 function loop() {
   if (!running || crashed) return;
 
-  // ✅ SPEED ĐỀU – NHANH HƠN (KHÔNG TĂNG TỐC)
-  const SPEED = 0.035;
-
+  const SPEED = 0.035; // chạy đều – nhanh hơn
   if (Math.random() < 0.05) return;
 
   liveMultiplier += SPEED;
@@ -216,6 +226,7 @@ function crash() {
   }, 1200);
 }
 
+/* ================== UI HELPERS ================== */
 function updateDisplay(val) {
   document.getElementById("display").innerText =
     (val ?? liveMultiplier).toFixed(2) + "x";
@@ -238,8 +249,43 @@ function addHistory(v) {
   h.prepend(s);
 }
 
-function buyPoints() {
-  alert("Nạp point sẽ gắn SOL qua Phantom ở bước tiếp theo");
+/* ================== BUY POINTS WITH SOL ================== */
+async function buyPoints() {
+  if (!wallet) {
+    alert("Bạn cần kết nối ví Phantom trước");
+    return;
+  }
+
+  const solAmount = Number(prompt("Nhập số SOL muốn nạp (tối thiểu 0.01):"));
+  if (!solAmount || solAmount < 0.01) return;
+
+  try {
+    const tx = new solanaWeb3.Transaction().add(
+      solanaWeb3.SystemProgram.transfer({
+        fromPubkey: window.solana.publicKey,
+        toPubkey: new solanaWeb3.PublicKey(SYSTEM_WALLET),
+        lamports: solAmount * solanaWeb3.LAMPORTS_PER_SOL
+      })
+    );
+
+    tx.feePayer = window.solana.publicKey;
+    const { blockhash } = await connection.getLatestBlockhash();
+    tx.recentBlockhash = blockhash;
+
+    const signed = await window.solana.signTransaction(tx);
+    const sig = await connection.sendRawTransaction(signed.serialize());
+    await connection.confirmTransaction(sig, "confirmed");
+
+    // QUY ĐỔI: 0.01 SOL = 10 POINT  → 1 SOL = 1000 POINT
+    const earned = solAmount * 1000;
+    userPoints += earned;
+    savePoints();
+
+    alert("Nạp thành công +" + earned + " point");
+
+  } catch (e) {
+    alert("Giao dịch thất bại");
+  }
 }
 </script>
 
