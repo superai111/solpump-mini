@@ -3,71 +3,67 @@
 <head>
 <meta charset="UTF-8">
 <title>Solpump Mini</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<script src="https://unpkg.com/@solana/web3.js@1.95.3/lib/index.iife.min.js"></script>
-
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
 body{margin:0;font-family:Arial;background:#050b1c;color:#fff}
-.container{max-width:420px;margin:auto;padding:20px}
-.card{background:#0b1229;border-radius:16px;padding:20px;margin-bottom:20px}
+.container{max-width:420px;margin:auto;padding:16px}
+.card{background:#0b1229;border-radius:16px;padding:16px;margin-bottom:16px}
+h1,h2{text-align:center}
 button{width:100%;padding:14px;border:none;border-radius:12px;background:#00ffa3;font-size:16px;font-weight:bold}
 .hidden{display:none}
-.multiplier{
-  font-size:64px;
-  text-align:center;
-  font-weight:bold;
-  margin:30px 0;
-}
-.controls button{margin-top:10px}
+.multiplier{font-size:64px;text-align:center;margin:30px 0;font-weight:bold}
 </style>
 </head>
 
 <body>
 <div class="container">
+
 <h1>🚀 Solpump Mini</h1>
 
-<!-- CONNECT -->
-<div class="card" id="connect">
-<button onclick="connect()">Connect Phantom Wallet</button>
-<p id="wallet"></p>
-<button id="enter" class="hidden" onclick="enterGame()">ENTER GAME</button>
+<!-- LEADERBOARD -->
+<div class="card">
+<h2>🏆 Weekly Leaderboard</h2>
+<p>1. Dz73...u3W6 — 1200 pts</p>
+<p>2. 9xKp...A21D — 860 pts</p>
+<p>3. HkQ2...M88Z — 540 pts</p>
+</div>
+
+<!-- GAME PREVIEW -->
+<div class="card">
+<h2>👀 Game Preview</h2>
+<div class="multiplier" id="preview">1.00x</div>
+<button onclick="enterGame()">ENTER GAME</button>
 </div>
 
 <!-- GAME -->
 <div class="card hidden" id="game">
-<h3>CRASH</h3>
+<h2>🎮 Crash Game</h2>
 
 <div class="multiplier" id="multi">1.00x</div>
 
-<div class="controls">
 <button onclick="startGame()">START</button>
-<button onclick="cashout()">STOP</button>
-</div>
+<button onclick="stopGame()">STOP</button>
 
 <p>Your Points: <span id="points">0</span></p>
+
+<hr>
+
+<h3>Buy Points (In Game)</h3>
+<p>1 SOL = 1000 points | Min 0.01 SOL</p>
+<input id="sol" placeholder="Enter SOL (ex: 0.05)" style="width:100%;padding:10px;border-radius:10px">
+<br><br>
+<button onclick="buyPoints()">Buy Points</button>
 </div>
+
 </div>
 
 <script>
-let wallet=null;
 let playing=false;
 let multiplier=1;
 let timer=null;
 let points=0;
 
-async function connect(){
-  if(!window.solana?.isPhantom){
-    alert("Open inside Phantom browser");
-    return;
-  }
-  const res=await window.solana.connect();
-  wallet=res.publicKey.toString();
-  document.getElementById("wallet").innerText="Wallet: "+wallet.slice(0,4)+"..."+wallet.slice(-4);
-  document.getElementById("enter").classList.remove("hidden");
-}
-
 function enterGame(){
-  document.getElementById("connect").classList.add("hidden");
   document.getElementById("game").classList.remove("hidden");
 }
 
@@ -77,33 +73,41 @@ function startGame(){
   multiplier=1;
   document.getElementById("multi").innerText="1.00x";
 
-  const crashAt=(Math.random()*4+1).toFixed(2);
+  const crashAt=(Math.random()*4+1.2).toFixed(2);
 
   timer=setInterval(()=>{
     multiplier+=0.02;
     document.getElementById("multi").innerText=multiplier.toFixed(2)+"x";
     if(multiplier>=crashAt){
-      stopGame(true);
+      crash();
     }
   },50);
 }
 
-function cashout(){
+function stopGame(){
   if(!playing) return;
-  stopGame(false);
-}
-
-function stopGame(crashed){
   clearInterval(timer);
   playing=false;
-  if(!crashed){
-    const earned=Math.floor(multiplier*10);
-    points+=earned;
+  const earned=Math.floor(multiplier*10);
+  points+=earned;
+  document.getElementById("points").innerText=points;
+}
+
+function crash(){
+  clearInterval(timer);
+  playing=false;
+  document.getElementById("multi").innerText="💥 CRASH";
+}
+
+function buyPoints(){
+  const sol=parseFloat(document.getElementById("sol").value);
+  if(sol>=0.01){
+    points+=Math.floor(sol*1000);
     document.getElementById("points").innerText=points;
-  }else{
-    document.getElementById("multi").innerText="💥 CRASH";
+    alert("Points added");
   }
 }
 </script>
+
 </body>
 </html>
