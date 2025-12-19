@@ -68,6 +68,10 @@ input {
   color: #ff5a5a;
   font-size: 14px;
 }
+.profit {
+  color: #2cffb3;
+  font-size: 14px;
+}
 </style>
 </head>
 
@@ -92,6 +96,7 @@ input {
   <input id="auto" type="number" step="0.01" placeholder="Auto Cashout">
 
   <div id="warn" class="warn"></div>
+  <div id="profit" class="profit"></div>
 
   <button onclick="startRound()">START</button>
   <button id="stopBtn" class="stop" onclick="cashout()">STOP</button>
@@ -127,7 +132,7 @@ function savePoints() {
   updatePoints();
 }
 function updatePoints() {
-  document.getElementById("points").innerText = userPoints;
+  document.getElementById("points").innerText = userPoints.toFixed(2);
 }
 
 /* ===== GAME STATE ===== */
@@ -167,6 +172,7 @@ function startRound() {
   if (running) return;
 
   document.getElementById("warn").innerText = "";
+  document.getElementById("profit").innerText = "";
   document.getElementById("stopBtn").disabled = false;
 
   bet = Number(document.getElementById("bet").value);
@@ -219,16 +225,20 @@ function loop() {
   }
 }
 
-/* ===== STOP ===== */
+/* ===== STOP (FIX PROFIT) ===== */
 function cashout() {
   if (!running || exited || crashed) return;
   exited = true;
 
-  const win = Math.floor(bet * liveMultiplier);
+  const win = +(bet * liveMultiplier).toFixed(2);
+  const profit = +(win - bet).toFixed(2);
+
   userPoints += win;
   savePoints();
 
-  // (4) UX: disable STOP sau khi cashout
+  document.getElementById("profit").innerText =
+    `+${profit} point`;
+
   document.getElementById("stopBtn").disabled = true;
 }
 
@@ -255,15 +265,12 @@ function addHistory(v) {
   h.prepend(s);
 }
 
-/* ===== NAP SOL (FIX 1 & 2) ===== */
+/* ===== NAP SOL (FIXED STABLE) ===== */
 async function depositSOL() {
-  if (!window.solana || !wallet) {
+  if (!wallet) {
     alert("Chưa kết nối ví");
     return;
   }
-
-  // (1) Ép reconnect nhẹ để Phantom Mobile luôn bật popup
-  await window.solana.connect({ onlyIfTrusted: false });
 
   const solStr = prompt("Nhập số SOL muốn nạp (tối thiểu 0.01):");
   if (!solStr) return;
@@ -287,16 +294,16 @@ async function depositSOL() {
     await connection.getLatestBlockhash();
   tx.recentBlockhash = blockhash;
 
-  const result = await window.solana.signAndSendTransaction(tx);
+  const signedTx = await window.solana.signTransaction(tx);
+  const sig = await connection.sendRawTransaction(signedTx.serialize());
 
-  // (2) Confirm chặt
   await connection.confirmTransaction({
-    signature: result.signature,
+    signature: sig,
     blockhash,
     lastValidBlockHeight
   });
 
-  const earned = Math.floor(sol * 1000);
+  const earned = +(sol * 1000).toFixed(2);
   userPoints += earned;
   savePoints();
 
@@ -305,4 +312,4 @@ async function depositSOL() {
 </script>
 
 </body>
-  </html>
+</html>
