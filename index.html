@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Solpump Mini</title>
 
 <script src="https://unpkg.com/@solana/web3.js@latest/lib/index.iife.min.js"></script>
@@ -38,10 +38,14 @@ button {
   background: #2cffb3;
   font-size: 18px;
   font-weight: bold;
+  margin-top: 6px;
 }
 button.stop {
   background: #222;
   color: #999;
+}
+button.stop:disabled {
+  opacity: 0.5;
 }
 input {
   width: 100%;
@@ -56,11 +60,13 @@ input {
   overflow-x: auto;
 }
 .history span {
+  background: #15245a;
   padding: 6px 10px;
   border-radius: 8px;
 }
 .warn {
-  color: #ff6b6b;
+  color: #ff5a5a;
+  font-size: 14px;
 }
 </style>
 </head>
@@ -85,53 +91,61 @@ input {
   <input id="bet" type="number" placeholder="Bet points">
   <input id="auto" type="number" step="0.01" placeholder="Auto Cashout">
 
-  <div class="warn" id="warn"></div>
+  <div id="warn" class="warn"></div>
 
   <button onclick="startRound()">START</button>
-  <button class="stop" onclick="cashout()">STOP</button>
+  <button id="stopBtn" class="stop" onclick="cashout()">STOP</button>
 
   <p>Your Points: <b id="points">0</b></p>
-  <button onclick="depositSOL()">NẠP POINT (SOL)</button>
+</div>
+
+<div class="card">
+  <button onclick="depositSOL()">NAP POINT (SOL)</button>
 </div>
 
 </div>
 
 <script>
-/* ================= CONFIG ================= */
-const SYSTEM_WALLET = new solanaWeb3.PublicKey(
-  "H2yVMrEbexHFdsAMFQtBY3Lp3BBz6cu6VVJwyiommqxZ" // ví hệ thống
-);
-
+/* ===== SOLANA ===== */
 const connection = new solanaWeb3.Connection(
   solanaWeb3.clusterApiUrl("mainnet-beta"),
   "confirmed"
 );
 
-/* ================= STATE ================= */
-let wallet = null;
-let userPoints = Number(localStorage.getItem("points")) || 1000;
+const SYSTEM_WALLET = new solanaWeb3.PublicKey(
+  "H2yVMrEbexHFdsAMFQtBY3Lp3BBz6cu6VVJwyiommqxZ"
+);
 
+let wallet = null;
+
+/* ===== POINT ===== */
+let userPoints = Number(localStorage.getItem("points")) || 1000;
+updatePoints();
+
+function savePoints() {
+  localStorage.setItem("points", userPoints);
+  updatePoints();
+}
+function updatePoints() {
+  document.getElementById("points").innerText = userPoints;
+}
+
+/* ===== GAME STATE ===== */
 let liveMultiplier = 1.0;
 let crashPoint = 0;
-
 let running = false;
 let crashed = false;
 let exited = false;
-
 let bet = 0;
 let auto = null;
 let interval = null;
 let roundStartTime = 0;
+const MIN_RUN_TIME = 600;
 
-const MIN_RUN_TIME = 500;
-
-/* ================= INIT ================= */
-updatePoints();
-
-/* ================= WALLET ================= */
+/* ===== WALLET ===== */
 async function connectWallet() {
   if (!window.solana) {
-    alert("Mở game trong Phantom");
+    alert("Open inside Phantom");
     return;
   }
   const r = await window.solana.connect();
@@ -140,31 +154,29 @@ async function connectWallet() {
     "Wallet: " + wallet.toString().slice(0,4) + "..." + wallet.toString().slice(-4);
 }
 
-/* ================= GAME ================= */
+/* ===== CRASH GEN ===== */
 function genCrash() {
   const r = Math.random();
-  if (r < 0.6) return 1 + Math.random() * 0.3;
-  if (r < 0.85) return 1.3 + Math.random() * 1.2;
-  return 2.5 + Math.random() * 5;
+  if (r < 0.6) return 1 + Math.random() * 0.5;
+  if (r < 0.85) return 1.5 + Math.random() * 1.5;
+  return 3 + Math.random() * 6;
 }
 
+/* ===== START ===== */
 function startRound() {
   if (running) return;
 
-  bet = parseInt(document.getElementById("bet").value);
-  auto = parseFloat(document.getElementById("auto").value) || null;
+  document.getElementById("warn").innerText = "";
+  document.getElementById("stopBtn").disabled = false;
 
-  if (!bet || bet <= 0) {
-    showWarn("Invalid bet");
+  bet = Number(document.getElementById("bet").value);
+  auto = Number(document.getElementById("auto").value) || null;
+
+  if (!bet || bet <= 0 || bet > userPoints) {
+    document.getElementById("warn").innerText =
+      "Số point không đủ, bạn cần nạp thêm";
     return;
   }
-
-  if (bet > userPoints) {
-    showWarn("Số point không đủ, bạn cần nạp thêm");
-    return;
-  }
-
-  hideWarn();
 
   userPoints -= bet;
   savePoints();
@@ -179,13 +191,17 @@ function startRound() {
   roundStartTime = Date.now();
   updateDisplay();
 
-  interval = setInterval(loop, 30);
+  interval = setInterval(loop, 25);
 }
 
+/* ===== LOOP ===== */
 function loop() {
   if (!running || crashed) return;
 
   let speed = 0.02;
+  if (liveMultiplier > 1.5) speed = 0.035;
+  if (liveMultiplier > 2.5) speed = 0.06;
+
   if (Math.random() < 0.04) return;
 
   liveMultiplier += speed;
@@ -196,13 +212,14 @@ function loop() {
   }
 
   if (
-    Date.now() - roundStartTime > MIN_RUN_TIME &&
+    Date.now() - roundStartTime >= MIN_RUN_TIME &&
     liveMultiplier >= crashPoint
   ) {
     crash();
   }
 }
 
+/* ===== STOP ===== */
 function cashout() {
   if (!running || exited || crashed) return;
   exited = true;
@@ -210,29 +227,43 @@ function cashout() {
   const win = Math.floor(bet * liveMultiplier);
   userPoints += win;
   savePoints();
+
+  // (4) UX: disable STOP sau khi cashout
+  document.getElementById("stopBtn").disabled = true;
 }
 
+/* ===== CRASH ===== */
 function crash() {
   crashed = true;
   running = false;
   clearInterval(interval);
 
-  addHistory(liveMultiplier);
-  setTimeout(() => {
-    liveMultiplier = 1.0;
-    updateDisplay();
-  }, 1200);
+  updateDisplay(crashPoint);
+  addHistory(crashPoint);
 }
 
-/* ================= SOL DEPOSIT ================= */
+/* ===== UI ===== */
+function updateDisplay(val) {
+  document.getElementById("display").innerText =
+    (val ?? liveMultiplier).toFixed(2) + "x";
+}
+function addHistory(v) {
+  const h = document.getElementById("history");
+  const s = document.createElement("span");
+  s.innerText = v.toFixed(2) + "x";
+  s.style.background = v < 1.3 ? "#7a1c1c" : "#1c7a52";
+  h.prepend(s);
+}
+
+/* ===== NAP SOL (FIX 1 & 2) ===== */
 async function depositSOL() {
-  if (!window.solana) {
-    alert("Mở trong Phantom");
+  if (!window.solana || !wallet) {
+    alert("Chưa kết nối ví");
     return;
   }
 
-  const resp = await window.solana.connect();
-  wallet = resp.publicKey;
+  // (1) Ép reconnect nhẹ để Phantom Mobile luôn bật popup
+  await window.solana.connect({ onlyIfTrusted: false });
 
   const solStr = prompt("Nhập số SOL muốn nạp (tối thiểu 0.01):");
   if (!solStr) return;
@@ -243,26 +274,24 @@ async function depositSOL() {
     return;
   }
 
-  const lamports = sol * solanaWeb3.LAMPORTS_PER_SOL;
-
   const tx = new solanaWeb3.Transaction().add(
     solanaWeb3.SystemProgram.transfer({
       fromPubkey: wallet,
       toPubkey: SYSTEM_WALLET,
-      lamports
+      lamports: sol * solanaWeb3.LAMPORTS_PER_SOL
     })
   );
 
   tx.feePayer = wallet;
   const { blockhash, lastValidBlockHeight } =
     await connection.getLatestBlockhash();
-
   tx.recentBlockhash = blockhash;
 
-  const signed = await window.solana.signAndSendTransaction(tx);
+  const result = await window.solana.signAndSendTransaction(tx);
 
+  // (2) Confirm chặt
   await connection.confirmTransaction({
-    signature: signed.signature,
+    signature: result.signature,
     blockhash,
     lastValidBlockHeight
   });
@@ -271,39 +300,9 @@ async function depositSOL() {
   userPoints += earned;
   savePoints();
 
-  alert(`Nạp thành công ${sol} SOL → +${earned} points`);
-}
-
-/* ================= UI ================= */
-function updateDisplay() {
-  document.getElementById("display").innerText =
-    liveMultiplier.toFixed(2) + "x";
-}
-
-function updatePoints() {
-  document.getElementById("points").innerText = userPoints;
-}
-
-function savePoints() {
-  localStorage.setItem("points", userPoints);
-  updatePoints();
-}
-
-function addHistory(v) {
-  const h = document.getElementById("history");
-  const s = document.createElement("span");
-  s.innerText = v.toFixed(2) + "x";
-  s.style.background = v < 1.3 ? "#7a1c1c" : "#1c7a52";
-  h.prepend(s);
-}
-
-function showWarn(msg) {
-  document.getElementById("warn").innerText = msg;
-}
-function hideWarn() {
-  document.getElementById("warn").innerText = "";
+  alert("Nạp thành công " + sol + " SOL");
 }
 </script>
 
 </body>
-</html>
+  </html>
