@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Solpump Mini</title>
+<title>Solspace</title>
 
 <script src="https://unpkg.com/@solana/web3.js@latest/lib/index.iife.min.js"></script>
 
@@ -14,65 +14,22 @@ body {
   font-family: Arial;
   margin: 0;
 }
-.container {
-  max-width: 420px;
-  margin: auto;
-  padding: 16px;
-}
-.card {
-  background: #0c1635;
-  border-radius: 14px;
-  padding: 16px;
-  margin-bottom: 14px;
-}
-.multiplier {
-  font-size: 56px;
-  font-weight: bold;
-  text-align: center;
-}
-button {
-  width: 100%;
-  padding: 14px;
-  border-radius: 12px;
-  border: none;
-  background: #2cffb3;
-  font-size: 18px;
-  font-weight: bold;
-  margin-top: 6px;
-}
-button.stop {
-  background: #222;
-  color: #999;
-}
-button.stop:disabled {
-  opacity: 0.5;
-}
-input {
-  width: 100%;
-  padding: 12px;
-  border-radius: 10px;
-  border: none;
-  margin-bottom: 8px;
-}
-.history {
-  display: flex;
-  gap: 6px;
-  overflow-x: auto;
-}
-.history span {
-  background: #15245a;
-  padding: 6px 10px;
-  border-radius: 8px;
-}
-.warn { color:#ff5a5a; font-size:14px; }
-.profit { color:#2cffb3; font-size:14px; }
+.container { max-width: 420px; margin: auto; padding: 16px; }
+.card { background: #0c1635; border-radius: 14px; padding: 16px; margin-bottom: 14px; }
+.multiplier { font-size: 56px; font-weight: bold; text-align: center; }
+button { width: 100%; padding: 14px; border-radius: 12px; border: none; background: #2cffb3; font-size: 18px; font-weight: bold; margin-top: 6px; }
+button.stop { background: #222; color: #999; }
+input { width: 100%; padding: 12px; border-radius: 10px; border: none; margin-bottom: 8px; }
+.history { display: flex; gap: 6px; overflow-x: auto; }
+.history span { background: #15245a; padding: 6px 10px; border-radius: 8px; }
+.warn { color: #ff5a5a; font-size: 14px; }
+.profit { color: #2cffb3; font-size: 14px; }
 </style>
 </head>
 
 <body>
 <div class="container">
-
-<h2>🚀 Solpump Mini</h2>
+<h2>🚀 Solspace</h2>
 
 <div class="card">
   <button onclick="connectWallet()">Connect Phantom Wallet</button>
@@ -93,209 +50,89 @@ input {
   <div id="profit" class="profit"></div>
 
   <button onclick="startRound()">START</button>
-  <button id="stopBtn" class="stop" onclick="cashout()">STOP</button>
+  <button class="stop" onclick="cashout()">STOP</button>
 
   <p>Your Points: <b id="points">0</b></p>
 </div>
 
 <div class="card">
-  <button onclick="depositSOL()">NAP POINT (SOL)</button>
+  <button onclick="checkDeposit()">NAP POINT (SOL)</button>
 </div>
-
 </div>
 
 <script>
-/* ===== SOLANA ===== */
-const connection = new solanaWeb3.Connection(
-  solanaWeb3.clusterApiUrl("mainnet-beta"),
-  "confirmed"
-);
-
-const SYSTEM_WALLET = new solanaWeb3.PublicKey(
-  "H2yVMrEbexHFdsAMFQtBY3Lp3BBz6cu6VVJwyiommqxZ"
-);
-
+const BACKEND_URL = "https://solspace-backend-i089.onrender.com";
 let wallet = null;
 
 /* ===== POINT ===== */
 let userPoints = Number(localStorage.getItem("points")) || 1000;
 updatePoints();
-
-function savePoints() {
-  localStorage.setItem("points", userPoints);
-  updatePoints();
-}
-function updatePoints() {
-  points.innerText = userPoints.toFixed(2);
-}
-
-/* ===== GAME STATE ===== */
-let liveMultiplier = 1.0;
-let crashPoint = 0;
-let running = false;
-let crashed = false;
-let exited = false;
-let bet = 0;
-let auto = null;
-let interval = null;
-let roundStartTime = 0;
-const MIN_RUN_TIME = 600;
+function savePoints(){ localStorage.setItem("points", userPoints); updatePoints(); }
+function updatePoints(){ document.getElementById("points").innerText = userPoints; }
 
 /* ===== WALLET ===== */
-async function connectWallet() {
-  if (!window.solana || !window.solana.isPhantom) {
-    alert("Mở trang trong Phantom Wallet");
-    return;
-  }
+async function connectWallet(){
+  if(!window.solana){ alert("Mở bằng Phantom"); return; }
   const r = await window.solana.connect();
-  wallet = r.publicKey;
-  walletDiv.innerText =
-    "Wallet: " + wallet.toString().slice(0,4) + "..." + wallet.toString().slice(-4);
+  wallet = r.publicKey.toString();
+  document.getElementById("wallet").innerText =
+    wallet.slice(0,4)+"..."+wallet.slice(-4);
 }
 
-/* ===== CRASH GEN ===== */
-function genCrash() {
-  const r = Math.random();
-  if (r < 0.6) return 1 + Math.random() * 0.5;
-  if (r < 0.85) return 1.5 + Math.random() * 1.5;
-  return 3 + Math.random() * 6;
+/* ===== GAME ===== */
+let liveMultiplier=1, crashPoint=0, running=false, exited=false, bet=0, auto=null;
+function genCrash(){
+  const r=Math.random();
+  if(r<0.6) return 1+Math.random()*0.5;
+  if(r<0.85) return 1.5+Math.random()*1.5;
+  return 3+Math.random()*6;
 }
-
-/* ===== START ===== */
-function startRound() {
-  if (running) return;
-
-  warn.innerText = "";
-  profit.innerText = "";
-  stopBtn.disabled = false;
-
-  bet = Number(betInput.value);
-  auto = Number(autoInput.value) || null;
-
-  if (!bet || bet > userPoints) {
-    warn.innerText = "Số point không đủ, bạn cần nạp thêm";
-    return;
-  }
-
-  userPoints -= bet;
-  savePoints();
-
-  liveMultiplier = 1.0;
-  crashPoint = genCrash();
-  running = true;
-  crashed = false;
-  exited = false;
-
-  roundStartTime = Date.now();
-  interval = setInterval(loop, 25);
+function startRound(){
+  if(running) return;
+  bet=+document.getElementById("bet").value;
+  auto=+document.getElementById("auto").value||null;
+  if(!bet||bet>userPoints){ document.getElementById("warn").innerText="Không đủ point"; return; }
+  userPoints-=bet; savePoints();
+  liveMultiplier=1; crashPoint=genCrash(); running=true; exited=false;
+  const loop=setInterval(()=>{
+    if(!running) return clearInterval(loop);
+    liveMultiplier+=0.03;
+    document.getElementById("display").innerText=liveMultiplier.toFixed(2)+"x";
+    if(!exited && auto && liveMultiplier>=auto) cashout();
+    if(liveMultiplier>=crashPoint){ running=false; addHistory(crashPoint); }
+  },30);
 }
-
-/* ===== LOOP ===== */
-function loop() {
-  if (!running || crashed) return;
-
-  let speed = 0.02;
-  if (liveMultiplier > 1.5) speed = 0.035;
-  if (liveMultiplier > 2.5) speed = 0.06;
-
-  if (Math.random() < 0.04) return;
-
-  liveMultiplier += speed;
-  display.innerText = liveMultiplier.toFixed(2) + "x";
-
-  if (!exited && auto && liveMultiplier >= auto) cashout();
-
-  if (Date.now() - roundStartTime >= MIN_RUN_TIME &&
-      liveMultiplier >= crashPoint) crash();
-}
-
-/* ===== STOP ===== */
-function cashout() {
-  if (!running || exited || crashed) return;
-  exited = true;
-
-  const win = bet * liveMultiplier;
-  userPoints += win;
-  savePoints();
-
-  profit.innerText = "+" + (win - bet).toFixed(2) + " point";
-  stopBtn.disabled = true;
-}
-
-/* ===== CRASH ===== */
-function crash() {
-  crashed = true;
-  running = false;
-  clearInterval(interval);
-
-  display.innerText = crashPoint.toFixed(2) + "x";
-  addHistory(crashPoint);
+function cashout(){
+  if(!running||exited) return;
+  exited=true;
+  const win=Math.floor(bet*liveMultiplier);
+  userPoints+=win; savePoints();
 }
 
 /* ===== HISTORY ===== */
-function addHistory(v) {
-  const s = document.createElement("span");
-  s.innerText = v.toFixed(2) + "x";
-  s.style.background = v < 1.3 ? "#7a1c1c" : "#1c7a52";
-  history.prepend(s);
+function addHistory(v){
+  const s=document.createElement("span");
+  s.innerText=v.toFixed(2)+"x";
+  document.getElementById("history").prepend(s);
 }
 
-/* ===== NẠP SOL – XÁC THỰC ON-CHAIN ===== */
-async function depositSOL() {
-  try {
-    if (!wallet) await connectWallet();
-    if (!wallet) return;
-
-    const sol = Number(prompt("Nhập số SOL muốn nạp (>= 0.01):"));
-    if (!sol || sol <= 0) return;
-
-    const tx = new solanaWeb3.Transaction().add(
-      solanaWeb3.SystemProgram.transfer({
-        fromPubkey: wallet,
-        toPubkey: SYSTEM_WALLET,
-        lamports: Math.floor(sol * solanaWeb3.LAMPORTS_PER_SOL)
-      })
-    );
-
-    tx.feePayer = wallet;
-    tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
-
-    const { signature } = await window.solana.signAndSendTransaction(tx);
-    await connection.confirmTransaction(signature, "confirmed");
-
-    const parsed = await connection.getParsedTransaction(signature, {
-      maxSupportedTransactionVersion: 0
-    });
-
-    let receivedLamports = 0;
-    parsed.transaction.message.instructions.forEach(ix => {
-      if (
-        ix.program === "system" &&
-        ix.parsed?.type === "transfer" &&
-        ix.parsed.info.destination === SYSTEM_WALLET.toString() &&
-        ix.parsed.info.source === wallet.toString()
-      ) {
-        receivedLamports += Number(ix.parsed.info.lamports);
-      }
-    });
-
-    const receivedSOL = receivedLamports / solanaWeb3.LAMPORTS_PER_SOL;
-    if (receivedSOL < 0.01) {
-      alert("SOL < 0.01, không cộng point");
-      return;
-    }
-
-    const earned = Math.floor(receivedSOL * 1000);
-    userPoints += earned;
+/* ===== NẠP SOL (BACKEND) ===== */
+async function checkDeposit(){
+  if(!wallet){ alert("Chưa kết nối ví"); return; }
+  const res=await fetch(BACKEND_URL+"/check-deposit",{
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body:JSON.stringify({ wallet })
+  });
+  const data=await res.json();
+  if(data.addedPoint>0){
+    userPoints+=data.addedPoint;
     savePoints();
-
-    alert(`Nạp thành công ${receivedSOL} SOL\n+${earned} point`);
-  } catch (e) {
-    console.error(e);
-    alert("Nạp SOL thất bại");
+    alert("Đã cộng "+data.addedPoint+" point");
+  }else{
+    alert("Chưa có SOL mới (>=0.005)");
   }
 }
 </script>
-
 </body>
   </html>
