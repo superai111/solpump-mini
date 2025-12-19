@@ -11,10 +11,14 @@ body{margin:0;font-family:Arial;background:#050b1c;color:#fff}
 .container{max-width:420px;margin:auto;padding:20px}
 .card{background:#0b1229;border-radius:16px;padding:20px;margin-bottom:20px}
 button{width:100%;padding:14px;border:none;border-radius:12px;background:#00ffa3;font-size:16px;font-weight:bold}
-input{width:100%;padding:12px;border-radius:10px;border:none;font-size:16px;margin:10px 0}
 .hidden{display:none}
-.small{font-size:14px;opacity:.8}
-hr{opacity:.2}
+.multiplier{
+  font-size:64px;
+  text-align:center;
+  font-weight:bold;
+  margin:30px 0;
+}
+.controls button{margin-top:10px}
 </style>
 </head>
 
@@ -22,105 +26,84 @@ hr{opacity:.2}
 <div class="container">
 <h1>🚀 Solpump Mini</h1>
 
-<!-- PREVIEW -->
-<div class="card">
-  <h3>👀 Game Preview</h3>
-  <p class="small">
-    Pump your score, climb weekly rankings, win SOL rewards.
-    You can watch everything before joining.
-  </p>
-</div>
-
-<!-- LEADERBOARD -->
-<div class="card">
-  <h3>🏆 Weekly Leaderboard</h3>
-  <ol class="small">
-    <li>Dz73...u3W6 — 1200 pts</li>
-    <li>9xKp...A21D — 860 pts</li>
-    <li>HkQ2...M88Z — 540 pts</li>
-  </ol>
-</div>
-
-<!-- STATISTICS -->
-<div class="card">
-  <h3>📊 Statistics</h3>
-  <p>Total Prize Pool: <span id="prize">0</span> SOL</p>
-</div>
-
 <!-- CONNECT -->
-<div class="card" id="connectCard">
-  <button onclick="connectWallet()">Connect Phantom Wallet</button>
-  <p id="wallet" class="small"></p>
-  <button id="enterBtn" class="hidden" onclick="enterGame()">ENTER GAME</button>
+<div class="card" id="connect">
+<button onclick="connect()">Connect Phantom Wallet</button>
+<p id="wallet"></p>
+<button id="enter" class="hidden" onclick="enterGame()">ENTER GAME</button>
 </div>
 
 <!-- GAME -->
 <div class="card hidden" id="game">
-  <h3>🎮 In Game</h3>
-  <p>Your Points: <span id="points">0</span></p>
+<h3>CRASH</h3>
 
-  <hr>
+<div class="multiplier" id="multi">1.00x</div>
 
-  <h4>Buy Points</h4>
-  <p class="small">1 SOL = 1000 points | Min 0.01 SOL</p>
-  <input id="solInput" placeholder="Enter SOL (ex: 0.06)">
-  <button onclick="buyPoints()">Buy Points</button>
+<div class="controls">
+<button onclick="startGame()">START</button>
+<button onclick="cashout()">STOP</button>
+</div>
+
+<p>Your Points: <span id="points">0</span></p>
 </div>
 </div>
 
 <script>
-const SYSTEM_WALLET = "H2yVMrEbexHFdsAMFQtBY3Lp3BBz6cu6VVJwyiommqxZ";
-const connection = new solanaWeb3.Connection(
-  solanaWeb3.clusterApiUrl("mainnet-beta"),
-  "confirmed"
-);
-
 let wallet=null;
+let playing=false;
+let multiplier=1;
+let timer=null;
 let points=0;
-let totalSol=0;
 
-async function connectWallet(){
+async function connect(){
   if(!window.solana?.isPhantom){
-    alert("Open this site inside Phantom browser");
+    alert("Open inside Phantom browser");
     return;
   }
-  const res = await window.solana.connect();
-  wallet = res.publicKey;
-  document.getElementById("wallet").innerText =
-    "Wallet: "+wallet.toString().slice(0,4)+"..."+wallet.toString().slice(-4);
-  document.getElementById("enterBtn").classList.remove("hidden");
+  const res=await window.solana.connect();
+  wallet=res.publicKey.toString();
+  document.getElementById("wallet").innerText="Wallet: "+wallet.slice(0,4)+"..."+wallet.slice(-4);
+  document.getElementById("enter").classList.remove("hidden");
 }
 
 function enterGame(){
+  document.getElementById("connect").classList.add("hidden");
   document.getElementById("game").classList.remove("hidden");
-  document.getElementById("connectCard").classList.add("hidden");
 }
 
-async function buyPoints(){
-  const sol = parseFloat(document.getElementById("solInput").value);
-  if(isNaN(sol)||sol<0.01){alert("Min 0.01 SOL");return;}
+function startGame(){
+  if(playing) return;
+  playing=true;
+  multiplier=1;
+  document.getElementById("multi").innerText="1.00x";
 
-  const tx = new solanaWeb3.Transaction().add(
-    solanaWeb3.SystemProgram.transfer({
-      fromPubkey: wallet,
-      toPubkey: new solanaWeb3.PublicKey(SYSTEM_WALLET),
-      lamports: sol * solanaWeb3.LAMPORTS_PER_SOL
-    })
-  );
+  const crashAt=(Math.random()*4+1).toFixed(2);
 
-  tx.feePayer = wallet;
-  tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+  timer=setInterval(()=>{
+    multiplier+=0.02;
+    document.getElementById("multi").innerText=multiplier.toFixed(2)+"x";
+    if(multiplier>=crashAt){
+      stopGame(true);
+    }
+  },50);
+}
 
-  const signed = await window.solana.signTransaction(tx);
-  const sig = await connection.sendRawTransaction(signed.serialize());
-  await connection.confirmTransaction(sig);
+function cashout(){
+  if(!playing) return;
+  stopGame(false);
+}
 
-  points += Math.floor(sol * 1000);
-  totalSol += sol;
-
-  document.getElementById("points").innerText = points;
-  document.getElementById("prize").innerText = (totalSol * 0.5).toFixed(3);
+function stopGame(crashed){
+  clearInterval(timer);
+  playing=false;
+  if(!crashed){
+    const earned=Math.floor(multiplier*10);
+    points+=earned;
+    document.getElementById("points").innerText=points;
+  }else{
+    document.getElementById("multi").innerText="💥 CRASH";
+  }
 }
 </script>
 </body>
-  </html>
+</html>
