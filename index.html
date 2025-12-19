@@ -77,8 +77,8 @@ input {
 </div>
 
 <div class="card">
-  <!-- HIỂN THỊ KẾT QUẢ CUỐI VÒNG -->
-  <div class="multiplier" id="roundResult">1.00x</div>
+  <!-- SỐ KHOANH ĐỎ: LUÔN HIỂN LIVE -->
+  <div class="multiplier" id="displayMultiplier">1.00x</div>
 
   <input id="bet" type="number" placeholder="Bet points (ex: 50)" />
   <input id="auto" type="number" step="0.01" placeholder="Auto Cashout (ex: 2.0)" />
@@ -103,7 +103,7 @@ let running = false;
 let crashed = false;
 let playerExited = false;
 
-let currentMultiplier = 1.0;
+let liveMultiplier = 1.0;
 let crashPoint = 0;
 let interval = null;
 
@@ -119,12 +119,12 @@ async function connectWallet() {
     "Wallet: " + wallet.slice(0,4) + "..." + wallet.slice(-4);
 }
 
-/* ---------------- GAME LOGIC ---------------- */
+/* ---------------- GAME ---------------- */
 function generateCrashPoint() {
   const r = Math.random();
-  if (r < 0.5) return 1 + Math.random() * 0.35;     // crash sớm nhiều
-  if (r < 0.8) return 1.35 + Math.random() * 1.2;
-  return 2.5 + Math.random() * 5;
+  if (r < 0.55) return 1 + Math.random() * 0.35;
+  if (r < 0.8) return 1.35 + Math.random() * 1.3;
+  return 2.5 + Math.random() * 6;
 }
 
 function startRound() {
@@ -141,37 +141,38 @@ function startRound() {
   userPoints -= betPoints;
   updatePoints();
 
-  currentMultiplier = 1.0;
+  liveMultiplier = 1.0;
   crashPoint = generateCrashPoint();
 
   running = true;
   crashed = false;
   playerExited = false;
 
+  updateDisplay(liveMultiplier);
+
   interval = setInterval(gameLoop, 25);
 }
 
 function gameLoop() {
-  if (crashed) return;
+  if (!running || crashed) return;
 
   let speed;
-  if (currentMultiplier < 1.4) speed = 0.02;
-  else if (currentMultiplier < 2) speed = 0.028;
-  else if (currentMultiplier < 3) speed = 0.04;
-  else speed = 0.06;
+  if (liveMultiplier < 1.4) speed = 0.02;
+  else if (liveMultiplier < 2) speed = 0.03;
+  else if (liveMultiplier < 3) speed = 0.045;
+  else speed = 0.065;
 
   // fake lag
-  if (Math.random() < 0.07) return;
+  if (Math.random() < 0.08) return;
 
-  currentMultiplier += speed;
+  liveMultiplier += speed;
+  updateDisplay(liveMultiplier);
 
-  // auto cashout
-  if (!playerExited && autoCashout && currentMultiplier >= autoCashout) {
+  if (!playerExited && autoCashout && liveMultiplier >= autoCashout) {
     playerCashout();
   }
 
-  // crash
-  if (currentMultiplier >= crashPoint) {
+  if (liveMultiplier >= crashPoint) {
     endRound();
   }
 }
@@ -180,7 +181,7 @@ function playerCashout() {
   if (!running || playerExited || crashed) return;
 
   playerExited = true;
-  const win = Math.floor(betPoints * currentMultiplier);
+  const win = Math.floor(betPoints * liveMultiplier);
   userPoints += win;
   updatePoints();
 }
@@ -190,18 +191,22 @@ function endRound() {
   running = false;
   clearInterval(interval);
 
-  document.getElementById("roundResult").innerText =
-    crashPoint.toFixed(2) + "x";
-
+  // GIỮ SỐ CRASH CUỐI VÒNG
+  updateDisplay(crashPoint);
   addHistory(crashPoint);
 
-  // reset sau 1s
   setTimeout(() => {
-    currentMultiplier = 1.0;
-  }, 1000);
+    liveMultiplier = 1.0;
+    updateDisplay(liveMultiplier);
+  }, 1200);
 }
 
 /* ---------------- UI ---------------- */
+function updateDisplay(val) {
+  document.getElementById("displayMultiplier").innerText =
+    val.toFixed(2) + "x";
+}
+
 function updatePoints() {
   document.getElementById("points").innerText = userPoints;
 }
