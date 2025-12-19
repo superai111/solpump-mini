@@ -1,160 +1,201 @@
-<!DOCTYPE html><html lang="en">
+<!DOCTYPE html>
+<html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Solpump Mini</title>
-  <style>
-    body{margin:0;font-family:Arial,Helvetica,sans-serif;background:linear-gradient(180deg,#050b2e,#020617);color:#fff}
-    .container{max-width:420px;margin:0 auto;padding:16px}
-    .card{background:#0b143f;border-radius:14px;padding:16px;margin-bottom:16px}
-    h1{margin:8px 0 16px 0}
-    button{width:100%;padding:14px;border:none;border-radius:10px;font-size:16px;font-weight:bold;background:#1cff9a;color:#000}
-    button.secondary{background:#1e293b;color:#fff}
-    input{width:100%;padding:12px;border-radius:8px;border:none;margin:8px 0;font-size:15px}
-    .center{text-align:center}
-    .big{font-size:48px;font-weight:bold}
-    .hidden{display:none}
-    .history{display:flex;gap:8px;overflow-x:auto;margin-bottom:12px}
-    .history span{background:#111c55;padding:6px 10px;border-radius:8px;white-space:nowrap;font-size:14px}
-    .win{color:#19f7a5}
-    .lose{color:#ff4d4d}
-  </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Solpump Mini</title>
+
+<style>
+body {
+  background: #070b2a;
+  color: #fff;
+  font-family: Arial, sans-serif;
+  margin: 0;
+  padding: 20px;
+}
+.card {
+  background: #0d1440;
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+.btn {
+  width: 100%;
+  padding: 14px;
+  border-radius: 12px;
+  border: none;
+  font-size: 18px;
+  font-weight: bold;
+  background: #19ff9c;
+  cursor: pointer;
+}
+.btn.stop {
+  background: #222;
+  color: #aaa;
+}
+input {
+  width: 100%;
+  padding: 12px;
+  border-radius: 10px;
+  border: none;
+  font-size: 16px;
+  margin-bottom: 10px;
+}
+.multiplier {
+  font-size: 56px;
+  text-align: center;
+  font-weight: bold;
+}
+.history {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+}
+.history span {
+  padding: 6px 10px;
+  background: #111a55;
+  border-radius: 8px;
+}
+</style>
 </head>
+
 <body>
-<div class="container"><h1>🚀 Solpump Mini</h1><!-- CONNECT --><div class="card">
-  <button id="connectBtn">Connect Phantom Wallet</button>
-  <div id="wallet" style="margin-top:8px"></div>
-</div><!-- PREVIEW --><div class="card center">
-  <div class="big" id="previewMultiplier">1.00x</div>
-  <button class="secondary" onclick="enterGame()">ENTER GAME</button>
-</div><!-- LEADERBOARD (VIEW ONLY) --><div class="card">
-  <h3>🏆 Weekly Leaderboard</h3>
-  <div>Preview only</div>
-</div><!-- STAT --><div class="card">
-  <h3>📊 Statistics</h3>
-  Total Prize Pool: <span id="pool">0</span> SOL
-</div><!-- GAME --><div class="card hidden" id="game">  <!-- HISTORY HORIZONTAL -->  <div class="history" id="history"></div>  <!-- MULTIPLIER -->  <div class="center big" id="multiplier">1.00x</div>  <!-- BET + AUTO --><label>Bet Points</label> <input id="betInput" type="number" min="1" value="50" />
 
-<label>Auto Cashout (x)</label> <input id="autoInput" type="number" step="0.01" min="1.01" value="2.00" />
+<h2>🚀 Solpump Mini</h2>
 
-<button onclick="startGame()">START</button> <button class="secondary" onclick="stopGame()">STOP</button>
+<div class="card">
+  <button class="btn" onclick="connectWallet()">Connect Phantom Wallet</button>
+  <div id="wallet"></div>
+</div>
 
-  <p>Your Points: <span id="points">1000</span></p>  <hr />  <h4>Buy Points (In Game)</h4>
-  <small>1 SOL = 1000 points | Min 0.01 SOL</small>
-  <input id="buySol" placeholder="Enter SOL (ex: 0.05)" />
-  <button onclick="buyPoints()">BUY POINTS</button></div></div><script>
-let wallet=null;
-let userPoints=1000;
-let betPoints=0;
-let autoCash=0;
-let mult=1.0;
-let timer=null;
-let running=false;
-let crashAt=0;
-let history=[];
+<div class="card">
+  <div class="history" id="history"></div>
+</div>
 
-const connectBtn=document.getElementById('connectBtn');
-const walletEl=document.getElementById('wallet');
+<div class="card">
+  <div class="multiplier" id="multiplier">1.00x</div>
 
-connectBtn.onclick=async()=>{
-  if(!window.solana||!window.solana.isPhantom){alert('Open this site inside Phantom browser');return;}
-  const res=await window.solana.connect();
-  wallet=res.publicKey.toString();
-  walletEl.innerText='Wallet: '+wallet.slice(0,4)+'...'+wallet.slice(-4);
-};
+  <label>Bet Points</label>
+  <input id="betPoints" type="number" value="50"/>
 
-function enterGame(){
-  document.getElementById('game').classList.remove('hidden');
+  <label>Auto Cashout (x)</label>
+  <input id="autoCashout" type="number" step="0.01" value="2.00"/>
+
+  <button class="btn" onclick="startGame()">START</button>
+  <button class="btn stop" onclick="stopGame()">STOP</button>
+
+  <p>Your Points: <span id="points">1000</span></p>
+</div>
+
+<script>
+/* ================== STATE ================== */
+let userPoints = 1000;
+let currentMultiplier = 1.0;
+let crashPoint = 0;
+let isPlaying = false;
+let hasCashedOut = false;
+let interval = null;
+
+/* ================== WALLET ================== */
+async function connectWallet() {
+  if (window.solana?.isPhantom) {
+    const res = await window.solana.connect();
+    document.getElementById("wallet").innerText =
+      "Wallet: " + res.publicKey.toString().slice(0,4) + "..." +
+      res.publicKey.toString().slice(-4);
+  } else {
+    alert("Open in Phantom browser");
+  }
 }
 
-function genCrash(){
-  const r=Math.random();
-  if(r<0.4) return rand(1.05,1.4);
-  if(r<0.7) return rand(1.4,2.5);
-  if(r<0.9) return rand(2.5,6);
-  return rand(6,20);
-}
+/* ================== GAME ================== */
+function startGame() {
+  if (isPlaying) return;
 
-function startGame(){
-  if(running) return;
-  betPoints=parseInt(document.getElementById('betInput').value);
-  autoCash=parseFloat(document.getElementById('autoInput').value);
-  if(betPoints<=0||betPoints>userPoints){alert('Not enough points');return;}
+  const bet = Number(betPoints.value);
+  if (bet <= 0 || bet > userPoints) {
+    alert("Invalid bet");
+    return;
+  }
 
-  // trừ điểm ngay khi bắt đầu
-  userPoints-=betPoints;
+  // reset ONLY when starting new round
+  currentMultiplier = 1.0;
+  document.getElementById("multiplier").innerText = "1.00x";
+
+  userPoints -= bet;
   updatePoints();
 
-  mult=1.0;
-  crashAt=genCrash();
-  running=true;
+  crashPoint = generateCrashPoint();
+  hasCashedOut = false;
+  isPlaying = true;
 
-  timer=setInterval(()=>{
-    let speed=0.02+mult*0.004;
-    if(Math.random()<0.1) speed*=3;
-    mult+=speed;
-    document.getElementById('multiplier').innerText=mult.toFixed(2)+'x';
-
-    // auto cashout
-    if(autoCash && mult>=autoCash){win();}
-
-    // crash
-    if(mult>=crashAt||Math.random()<0.005){lose();}
-  },60);
+  interval = setInterval(gameLoop, 50);
 }
 
-function stopGame(){
-  if(!running) return;
-  win();
+function gameLoop() {
+  if (!isPlaying) return;
+
+  currentMultiplier += 0.01;
+  document.getElementById("multiplier").innerText =
+    currentMultiplier.toFixed(2) + "x";
+
+  const auto = Number(autoCashout.value);
+  if (auto > 0 && currentMultiplier >= auto && !hasCashedOut) {
+    cashOut();
+  }
+
+  if (currentMultiplier >= crashPoint) {
+    crash();
+  }
 }
 
-function win(){
-  clearInterval(timer);
-  running=false;
-  const gain=Math.floor(betPoints*mult);
-  userPoints+=gain;
-  addHistory(mult,true);
-  resetRound();
+function stopGame() {
+  if (!isPlaying || hasCashedOut) return;
+  cashOut();
 }
 
-function lose(){
-  clearInterval(timer);
-  running=false;
-  addHistory(mult,false);
-  resetRound();
-}
+function cashOut() {
+  hasCashedOut = true;
+  isPlaying = false;
+  clearInterval(interval);
 
-function resetRound(){
-  mult=1.0;
-  document.getElementById('multiplier').innerText='1.00x';
+  const bet = Number(betPoints.value);
+  const win = Math.floor(bet * currentMultiplier);
+  userPoints += win;
   updatePoints();
+
+  addHistory(currentMultiplier);
 }
 
-function updatePoints(){
-  document.getElementById('points').innerText=userPoints;
+function crash() {
+  clearInterval(interval);
+  isPlaying = false;
+
+  document.getElementById("multiplier").innerText =
+    crashPoint.toFixed(2) + "x";
+
+  addHistory(crashPoint);
 }
 
-function addHistory(x,win){
-  history.unshift({x:x.toFixed(2),win});
-  history=history.slice(0,12);
-  const h=document.getElementById('history');
-  h.innerHTML='';
-  history.forEach(r=>{
-    const s=document.createElement('span');
-    s.className=r.win?'win':'lose';
-    s.innerText=(r.win?'':'💥 ')+r.x+'x';
-    h.appendChild(s);
-  });
+function updatePoints() {
+  document.getElementById("points").innerText = userPoints;
 }
 
-function buyPoints(){
-  const sol=parseFloat(document.getElementById('buySol').value);
-  if(isNaN(sol)||sol<0.01){alert('Min 0.01 SOL');return;}
-  userPoints+=Math.floor(sol*1000);
-  updatePoints();
-  document.getElementById('buySol').value='';
+/* ================== HELPERS ================== */
+function generateCrashPoint() {
+  const r = Math.random();
+  if (r < 0.6) return +(1 + Math.random()).toFixed(2);     // 1.0 – 2.0
+  if (r < 0.9) return +(2 + Math.random() * 3).toFixed(2); // 2 – 5
+  return +(5 + Math.random() * 5).toFixed(2);             // 5 – 10
 }
 
-function rand(a,b){return Math.random()*(b-a)+a}
-</script></body>
+function addHistory(x) {
+  const h = document.getElementById("history");
+  const span = document.createElement("span");
+  span.innerText = x.toFixed(2) + "x";
+  h.prepend(span);
+}
+</script>
+
+</body>
 </html>
