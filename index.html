@@ -123,8 +123,11 @@ const SYSTEM_WALLET = new solanaWeb3.PublicKey(
 
 let wallet = null;
 
+/* ===== RESET POINT FOR TEST (THEO YÊU CẦU) ===== */
+localStorage.setItem("points", "1000");
+
 /* ===== POINT ===== */
-let userPoints = Number(localStorage.getItem("points")) || 1000;
+let userPoints = Number(localStorage.getItem("points"));
 updatePoints();
 
 function savePoints() {
@@ -225,7 +228,7 @@ function loop() {
   }
 }
 
-/* ===== STOP (FIX PROFIT) ===== */
+/* ===== STOP ===== */
 function cashout() {
   if (!running || exited || crashed) return;
   exited = true;
@@ -236,9 +239,7 @@ function cashout() {
   userPoints += win;
   savePoints();
 
-  document.getElementById("profit").innerText =
-    `+${profit} point`;
-
+  document.getElementById("profit").innerText = `+${profit} point`;
   document.getElementById("stopBtn").disabled = true;
 }
 
@@ -265,7 +266,7 @@ function addHistory(v) {
   h.prepend(s);
 }
 
-/* ===== NAP SOL (FIXED STABLE) ===== */
+/* ===== NẠP SOL – PHANTOM MOBILE + DESKTOP (ĐÃ FIX) ===== */
 async function depositSOL() {
   if (!wallet) {
     alert("Chưa kết nối ví");
@@ -290,18 +291,10 @@ async function depositSOL() {
   );
 
   tx.feePayer = wallet;
-  const { blockhash, lastValidBlockHeight } =
-    await connection.getLatestBlockhash();
-  tx.recentBlockhash = blockhash;
+  tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
 
-  const signedTx = await window.solana.signTransaction(tx);
-  const sig = await connection.sendRawTransaction(signedTx.serialize());
-
-  await connection.confirmTransaction({
-    signature: sig,
-    blockhash,
-    lastValidBlockHeight
-  });
+  const result = await window.solana.signAndSendTransaction(tx);
+  await connection.confirmTransaction(result.signature, "confirmed");
 
   const earned = +(sol * 1000).toFixed(2);
   userPoints += earned;
@@ -312,4 +305,4 @@ async function depositSOL() {
 </script>
 
 </body>
-</html>
+  </html>
