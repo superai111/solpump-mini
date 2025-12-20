@@ -45,7 +45,7 @@ input {
 <div class="container">
 <h2>🚀 Solspace</h2>
 
-<!-- CONNECT WALLET -->
+<!-- CONNECT -->
 <div class="card">
   <button onclick="connectWallet()">Connect Phantom Wallet</button>
   <div id="wallet"></div>
@@ -71,7 +71,7 @@ input {
   <p>Your Points: <b id="points">0</b></p>
 </div>
 
-<!-- DEPOSIT SOL -->
+<!-- DEPOSIT -->
 <div class="card">
   <input id="depositAmount" type="number" step="0.001" placeholder="Nhập SOL (>= 0.005)">
   <button onclick="depositSOL()">NAP POINT (SOL)</button>
@@ -99,7 +99,7 @@ function updatePoints(){
   document.getElementById("points").innerText = userPoints;
 }
 
-/* ===== CONNECT WALLET (KHÔNG KÝ – ỔN ĐỊNH NHẤT) ===== */
+/* ===== CONNECT WALLET (KHÔNG KÝ, ỔN ĐỊNH NHẤT) ===== */
 async function connectWallet(){
   try {
     if(!window.solana || !window.solana.isPhantom){
@@ -186,55 +186,65 @@ function addHistory(v){
   document.getElementById("history").prepend(s);
 }
 
-/* ===== DEPOSIT SOL – PHANTOM SẼ BẬT KÝ ===== */
+/* ===== DEPOSIT SOL – FIX CHUẨN PHANTOM MOBILE ===== */
 async function depositSOL(){
-  if(!wallet){
-    alert("Chưa kết nối ví");
-    return;
-  }
+  try {
+    if(!window.solana || !window.solana.isPhantom){
+      alert("Chưa mở Phantom");
+      return;
+    }
 
-  const sol = Number(document.getElementById("depositAmount").value);
-  if(isNaN(sol) || sol < 0.005){
-    alert("Tối thiểu 0.005 SOL");
-    return;
-  }
+    // 🔥 MẤU CHỐT: reconnect trước khi ký
+    await window.solana.connect();
 
-  const connection = new solanaWeb3.Connection(
-    solanaWeb3.clusterApiUrl("mainnet-beta"),
-    "confirmed"
-  );
+    const sol = Number(document.getElementById("depositAmount").value);
+    if(isNaN(sol) || sol < 0.005){
+      alert("Tối thiểu 0.005 SOL");
+      return;
+    }
 
-  const fromPubkey = new solanaWeb3.PublicKey(wallet);
+    const connection = new solanaWeb3.Connection(
+      solanaWeb3.clusterApiUrl("mainnet-beta"),
+      "confirmed"
+    );
 
-  const tx = new solanaWeb3.Transaction().add(
-    solanaWeb3.SystemProgram.transfer({
-      fromPubkey,
-      toPubkey: SYSTEM_WALLET,
-      lamports: Math.floor(sol * solanaWeb3.LAMPORTS_PER_SOL)
-    })
-  );
+    const fromPubkey = window.solana.publicKey;
 
-  tx.feePayer = fromPubkey;
-  tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+    const tx = new solanaWeb3.Transaction().add(
+      solanaWeb3.SystemProgram.transfer({
+        fromPubkey,
+        toPubkey: SYSTEM_WALLET,
+        lamports: Math.floor(sol * solanaWeb3.LAMPORTS_PER_SOL)
+      })
+    );
 
-  // 🔥 Phantom BẮT BUỘC bật ký ở đây
-  const signed = await window.solana.signAndSendTransaction(tx);
-  await connection.confirmTransaction(signed.signature, "confirmed");
+    tx.feePayer = fromPubkey;
+    const { blockhash } = await connection.getLatestBlockhash();
+    tx.recentBlockhash = blockhash;
 
-  // Backend cộng point
-  const res = await fetch(BACKEND_URL + "/check-deposit",{
-    method:"POST",
-    headers:{ "Content-Type":"application/json" },
-    body: JSON.stringify({ wallet })
-  });
-  const data = await res.json();
+    // 🔥 Phantom CHẮC CHẮN bật ở đây
+    const { signature } = await window.solana.signAndSendTransaction(tx);
+    await connection.confirmTransaction(signature, "confirmed");
 
-  if(data.ok && data.addedPoint > 0){
-    userPoints += data.addedPoint;
-    savePoints();
-    alert("Nạp thành công +" + data.addedPoint + " point");
-  }else{
-    alert("Đã gửi SOL, backend sẽ cập nhật sau vài giây");
+    // Backend cộng point
+    const res = await fetch(BACKEND_URL + "/check-deposit",{
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({ wallet: fromPubkey.toString() })
+    });
+    const data = await res.json();
+
+    if(data.ok && data.addedPoint > 0){
+      userPoints += data.addedPoint;
+      savePoints();
+      alert("Nạp thành công +" + data.addedPoint + " point");
+    }else{
+      alert("Đã gửi SOL, backend cập nhật sau vài giây");
+    }
+
+  } catch(e){
+    console.error(e);
+    alert("Giao dịch bị hủy hoặc lỗi Phantom");
   }
 }
 </script>
