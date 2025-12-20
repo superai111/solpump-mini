@@ -38,7 +38,6 @@ input {
 .history { display: flex; gap: 6px; overflow-x: auto; }
 .history span { background: #15245a; padding: 6px 10px; border-radius: 8px; }
 .warn { color: #ff5a5a; font-size: 14px; }
-.profit { color: #2cffb3; font-size: 14px; }
 </style>
 </head>
 
@@ -46,15 +45,18 @@ input {
 <div class="container">
 <h2>🚀 Solspace</h2>
 
+<!-- CONNECT WALLET -->
 <div class="card">
   <button onclick="connectWallet()">Connect Phantom Wallet</button>
   <div id="wallet"></div>
 </div>
 
+<!-- HISTORY -->
 <div class="card">
   <div class="history" id="history"></div>
 </div>
 
+<!-- GAME -->
 <div class="card">
   <div class="multiplier" id="display">1.00x</div>
 
@@ -62,7 +64,6 @@ input {
   <input id="auto" type="number" step="0.01" placeholder="Auto Cashout">
 
   <div id="warn" class="warn"></div>
-  <div id="profit" class="profit"></div>
 
   <button onclick="startRound()">START</button>
   <button class="stop" onclick="cashout()">STOP</button>
@@ -70,7 +71,9 @@ input {
   <p>Your Points: <b id="points">0</b></p>
 </div>
 
+<!-- DEPOSIT SOL -->
 <div class="card">
+  <input id="depositAmount" type="number" step="0.001" placeholder="Nhập SOL (>= 0.005)">
   <button onclick="depositSOL()">NAP POINT (SOL)</button>
 </div>
 </div>
@@ -96,16 +99,20 @@ function updatePoints(){
   document.getElementById("points").innerText = userPoints;
 }
 
-/* ===== WALLET (CONNECT ONLY – KHÔNG KÝ) ===== */
+/* ===== CONNECT WALLET (KHÔNG KÝ – ỔN ĐỊNH NHẤT) ===== */
 async function connectWallet(){
-  if (!window.solana || !window.solana.isPhantom) {
-    alert("Vui lòng mở bằng Phantom Browser");
-    return;
+  try {
+    if(!window.solana || !window.solana.isPhantom){
+      alert("Vui lòng mở bằng Phantom Browser");
+      return;
+    }
+    const r = await window.solana.connect();
+    wallet = r.publicKey.toString();
+    document.getElementById("wallet").innerText =
+      wallet.slice(0,4) + "..." + wallet.slice(-4);
+  } catch(e){
+    alert("Không kết nối được ví");
   }
-  const resp = await window.solana.connect();
-  wallet = resp.publicKey.toString();
-  document.getElementById("wallet").innerText =
-    wallet.slice(0,4) + "..." + wallet.slice(-4);
 }
 
 /* ===== GAME ===== */
@@ -148,6 +155,7 @@ function startRound(){
       clearInterval(loop);
       return;
     }
+
     liveMultiplier += 0.03;
     document.getElementById("display").innerText =
       liveMultiplier.toFixed(2)+"x";
@@ -155,6 +163,7 @@ function startRound(){
     if(!exited && auto && liveMultiplier >= auto){
       cashout();
     }
+
     if(liveMultiplier >= crashPoint){
       running = false;
       addHistory(crashPoint);
@@ -177,17 +186,14 @@ function addHistory(v){
   document.getElementById("history").prepend(s);
 }
 
-/* ===== NẠP SOL – PHANTOM KÝ GIAO DỊCH ===== */
+/* ===== DEPOSIT SOL – PHANTOM SẼ BẬT KÝ ===== */
 async function depositSOL(){
   if(!wallet){
     alert("Chưa kết nối ví");
     return;
   }
 
-  const solStr = prompt("Nhập số SOL muốn nạp (tối thiểu 0.005):");
-  if(!solStr) return;
-
-  const sol = Number(solStr);
+  const sol = Number(document.getElementById("depositAmount").value);
   if(isNaN(sol) || sol < 0.005){
     alert("Tối thiểu 0.005 SOL");
     return;
@@ -199,6 +205,7 @@ async function depositSOL(){
   );
 
   const fromPubkey = new solanaWeb3.PublicKey(wallet);
+
   const tx = new solanaWeb3.Transaction().add(
     solanaWeb3.SystemProgram.transfer({
       fromPubkey,
@@ -210,7 +217,7 @@ async function depositSOL(){
   tx.feePayer = fromPubkey;
   tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
 
-  // Phantom bắt buộc ký ở đây
+  // 🔥 Phantom BẮT BUỘC bật ký ở đây
   const signed = await window.solana.signAndSendTransaction(tx);
   await connection.confirmTransaction(signed.signature, "confirmed");
 
@@ -227,7 +234,7 @@ async function depositSOL(){
     savePoints();
     alert("Nạp thành công +" + data.addedPoint + " point");
   }else{
-    alert("Đã gửi SOL, backend chưa ghi nhận – bấm lại sau 10–20s");
+    alert("Đã gửi SOL, backend sẽ cập nhật sau vài giây");
   }
 }
 </script>
