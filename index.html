@@ -84,6 +84,7 @@ const SYSTEM_WALLET = new solanaWeb3.PublicKey(
 
 /* ===== STATE ===== */
 let wallet = null;
+let walletSignature = null;
 let userPoints = Number(localStorage.getItem("points")) || 0;
 updatePoints();
 
@@ -96,16 +97,30 @@ function updatePoints(){
   document.getElementById("points").innerText = userPoints;
 }
 
-/* ===== WALLET ===== */
+/* ===== WALLET (FIX: BẮT KÝ MESSAGE) ===== */
 async function connectWallet(){
-  if(!window.solana){
-    alert("Mở bằng Phantom");
+  if (!window.solana || !window.solana.isPhantom) {
+    alert("Vui lòng mở bằng Phantom Browser");
     return;
   }
-  const r = await window.solana.connect();
-  wallet = r.publicKey.toString();
+
+  // 1️⃣ Connect ví
+  const resp = await window.solana.connect({ onlyIfTrusted: false });
+  wallet = resp.publicKey.toString();
+
+  // 2️⃣ Message để ký (bắt buộc)
+  const message = `Solspace login\nWallet: ${wallet}\nTime: ${Date.now()}`;
+  const encodedMessage = new TextEncoder().encode(message);
+
+  // 3️⃣ Phantom bật popup ký
+  const signed = await window.solana.signMessage(encodedMessage, "utf8");
+  walletSignature = Array.from(signed.signature);
+
+  // 4️⃣ Hiển thị ví
   document.getElementById("wallet").innerText =
-    wallet.slice(0,4)+"..."+wallet.slice(-4);
+    wallet.slice(0,4) + "..." + wallet.slice(-4);
+
+  alert("Kết nối & ký ví thành công");
 }
 
 /* ===== GAME ===== */
@@ -213,11 +228,11 @@ async function depositSOL(){
   tx.feePayer = fromPubkey;
   tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
 
-  // 🔥 Phantom bật lên ở đây
+  // Phantom bật ký giao dịch
   const signed = await window.solana.signAndSendTransaction(tx);
   await connection.confirmTransaction(signed.signature, "confirmed");
 
-  // 🔥 Backend cộng point
+  // Backend cộng point
   const res = await fetch(BACKEND_URL + "/check-deposit",{
     method:"POST",
     headers:{ "Content-Type":"application/json" },
