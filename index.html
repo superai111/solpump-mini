@@ -6,6 +6,7 @@
 <title>Solspace</title>
 
 <script src="https://unpkg.com/@solana/web3.js@latest/lib/index.iife.min.js"></script>
+<script src="https://unpkg.com/bs58@5.0.0/dist/bs58.min.js"></script>
 
 <style>
 body {
@@ -84,7 +85,7 @@ const SYSTEM_WALLET = new solanaWeb3.PublicKey(
 
 /* ===== STATE ===== */
 let wallet = null;
-let walletSignature = null;
+let signedOK = false; // ⬅️ đã xác thực chữ ký với backend chưa
 let userPoints = Number(localStorage.getItem("points")) || 0;
 updatePoints();
 
@@ -97,30 +98,52 @@ function updatePoints(){
   document.getElementById("points").innerText = userPoints;
 }
 
-/* ===== WALLET (FIX: BẮT KÝ MESSAGE) ===== */
+/* ===== WALLET: CONNECT + SIGN + VERIFY ===== */
 async function connectWallet(){
-  if (!window.solana || !window.solana.isPhantom) {
-    alert("Vui lòng mở bằng Phantom Browser");
-    return;
+  try {
+    if (!window.solana || !window.solana.isPhantom) {
+      alert("Vui lòng mở bằng Phantom Browser");
+      return;
+    }
+
+    // 1) Connect
+    const resp = await window.solana.connect({ onlyIfTrusted: false });
+    const pubkey = resp.publicKey.toString();
+
+    // 2) Message ký
+    const message = `Solspace login\nWallet: ${pubkey}\nTime: ${Date.now()}`;
+    const encoded = new TextEncoder().encode(message);
+
+    // 3) Ký message (Phantom bật popup)
+    const signed = await window.solana.signMessage(encoded, "utf8");
+    const signatureBase58 = bs58.encode(signed.signature);
+
+    // 4) Gửi backend xác thực
+    const res = await fetch(BACKEND_URL + "/verify-sign", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        wallet: pubkey,
+        message,
+        signature: signatureBase58
+      })
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      alert("Xác thực chữ ký thất bại");
+      return;
+    }
+
+    // 5) OK
+    wallet = pubkey;
+    signedOK = true;
+    document.getElementById("wallet").innerText =
+      pubkey.slice(0,4) + "..." + pubkey.slice(-4);
+    alert("Kết nối & ký ví thành công");
+  } catch (e) {
+    console.error(e);
+    alert("Lỗi kết nối/ký ví");
   }
-
-  // 1️⃣ Connect ví
-  const resp = await window.solana.connect({ onlyIfTrusted: false });
-  wallet = resp.publicKey.toString();
-
-  // 2️⃣ Message để ký (bắt buộc)
-  const message = `Solspace login\nWallet: ${wallet}\nTime: ${Date.now()}`;
-  const encodedMessage = new TextEncoder().encode(message);
-
-  // 3️⃣ Phantom bật popup ký
-  const signed = await window.solana.signMessage(encodedMessage, "utf8");
-  walletSignature = Array.from(signed.signature);
-
-  // 4️⃣ Hiển thị ví
-  document.getElementById("wallet").innerText =
-    wallet.slice(0,4) + "..." + wallet.slice(-4);
-
-  alert("Kết nối & ký ví thành công");
 }
 
 /* ===== GAME ===== */
@@ -163,7 +186,6 @@ function startRound(){
       clearInterval(loop);
       return;
     }
-
     liveMultiplier += 0.03;
     document.getElementById("display").innerText =
       liveMultiplier.toFixed(2)+"x";
@@ -171,7 +193,6 @@ function startRound(){
     if(!exited && auto && liveMultiplier >= auto){
       cashout();
     }
-
     if(liveMultiplier >= crashPoint){
       running = false;
       addHistory(crashPoint);
@@ -196,8 +217,8 @@ function addHistory(v){
 
 /* ===== NẠP SOL – PHANTOM + BACKEND ===== */
 async function depositSOL(){
-  if(!window.solana || !wallet){
-    alert("Chưa kết nối Phantom");
+  if(!window.solana || !wallet || !signedOK){
+    alert("Cần kết nối & ký ví trước");
     return;
   }
 
@@ -216,12 +237,11 @@ async function depositSOL(){
   );
 
   const fromPubkey = new solanaWeb3.PublicKey(wallet);
-
   const tx = new solanaWeb3.Transaction().add(
     solanaWeb3.SystemProgram.transfer({
       fromPubkey,
       toPubkey: SYSTEM_WALLET,
-      lamports: sol * solanaWeb3.LAMPORTS_PER_SOL
+      lamports: Math.floor(sol * solanaWeb3.LAMPORTS_PER_SOL)
     })
   );
 
@@ -238,7 +258,6 @@ async function depositSOL(){
     headers:{ "Content-Type":"application/json" },
     body: JSON.stringify({ wallet })
   });
-
   const data = await res.json();
 
   if(data.ok && data.addedPoint > 0){
