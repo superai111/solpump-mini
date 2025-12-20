@@ -213,11 +213,11 @@ async function depositSOL(){
   tx.feePayer = fromPubkey;
   tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
 
-  // 👉 Phantom bật lên
+  // 🔥 Phantom bật lên ở đây
   const signed = await window.solana.signAndSendTransaction(tx);
   await connection.confirmTransaction(signed.signature, "confirmed");
 
-  // 👉 Gọi backend cộng point
+  // 🔥 Backend cộng point
   const res = await fetch(BACKEND_URL + "/check-deposit",{
     method:"POST",
     headers:{ "Content-Type":"application/json" },
@@ -231,7 +231,7 @@ async function depositSOL(){
     savePoints();
     alert("Nạp thành công +" + data.addedPoint + " point");
   }else{
-    alert("Đã gửi SOL, backend chưa ghi nhận – thử lại sau");
+    alert("Đã gửi SOL, backend chưa ghi nhận – bấm lại sau 10–20s");
   }
 }
 </script>
