@@ -38,7 +38,6 @@ input {
 .history { display: flex; gap: 6px; overflow-x: auto; }
 .history span { background: #15245a; padding: 6px 10px; border-radius: 8px; }
 .warn { color: #ff5a5a; font-size: 14px; }
-.profit { color: #2cffb3; font-size: 14px; }
 </style>
 </head>
 
@@ -57,16 +56,11 @@ input {
 
 <div class="card">
   <div class="multiplier" id="display">1.00x</div>
-
   <input id="bet" type="number" placeholder="Bet points">
   <input id="auto" type="number" step="0.01" placeholder="Auto Cashout">
-
   <div id="warn" class="warn"></div>
-  <div id="profit" class="profit"></div>
-
   <button onclick="startRound()">START</button>
   <button class="stop" onclick="cashout()">STOP</button>
-
   <p>Your Points: <b id="points">0</b></p>
 </div>
 
@@ -96,18 +90,27 @@ function updatePoints(){
   document.getElementById("points").innerText = userPoints;
 }
 
-/* ===== WALLET (CONNECT – KHÔNG KÝ) ===== */
+/* ===== CONNECT WALLET (FIX CHUẨN PHANTOM) ===== */
 async function connectWallet(){
   if (!window.solana || !window.solana.isPhantom) {
-    alert("Vui lòng mở trong trình duyệt Phantom");
+    alert("Vui lòng mở bằng Phantom Browser");
     return;
   }
 
-  const resp = await window.solana.connect();
-  wallet = resp.publicKey.toString();
+  try {
+    if (window.solana.isConnected) {
+      wallet = window.solana.publicKey.toString();
+    } else {
+      const resp = await window.solana.connect();
+      wallet = resp.publicKey.toString();
+    }
 
-  document.getElementById("wallet").innerText =
-    wallet.slice(0,4) + "..." + wallet.slice(-4);
+    document.getElementById("wallet").innerText =
+      wallet.slice(0,4) + "..." + wallet.slice(-4);
+
+  } catch (e) {
+    alert("Bạn đã hủy kết nối ví");
+  }
 }
 
 /* ===== GAME ===== */
@@ -181,10 +184,10 @@ function addHistory(v){
   document.getElementById("history").prepend(s);
 }
 
-/* ===== NẠP SOL – PHANTOM BẮT BUỘC BẬT GIAO DIỆN GỬI ===== */
+/* ===== NẠP SOL – BẮT BUỘC PHANTOM BẬT GIAO DIỆN GỬI ===== */
 async function depositSOL(){
   if(!window.solana || !wallet){
-    alert("Chưa kết nối Phantom");
+    alert("Chưa kết nối ví");
     return;
   }
 
@@ -215,26 +218,26 @@ async function depositSOL(){
   tx.feePayer = fromPubkey;
   tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
 
-  // 👉 Phantom LUÔN bật giao diện ký & gửi
+  // 👉 PHANTOM BẮT BUỘC HIỆN GIAO DIỆN GỬI
   const signed = await window.solana.signAndSendTransaction(tx);
   await connection.confirmTransaction(signed.signature, "confirmed");
 
-  // 👉 Backend quét blockchain & cộng point
+  // 👉 Gọi backend cộng point
   const res = await fetch(BACKEND_URL + "/check-deposit",{
     method:"POST",
     headers:{ "Content-Type":"application/json" },
     body: JSON.stringify({ wallet })
   });
-  const data = await res.json();
 
+  const data = await res.json();
   if(data.ok && data.addedPoint > 0){
     userPoints += data.addedPoint;
     savePoints();
     alert("Nạp thành công +" + data.addedPoint + " point");
   }else{
-    alert("Đã gửi SOL, backend chưa ghi nhận – bấm lại sau 10–20s");
+    alert("Đã gửi SOL, backend chưa ghi nhận – thử lại sau");
   }
 }
 </script>
 </body>
-  </html>
+</html>
