@@ -58,7 +58,6 @@ input, select {
 }
 .toast.show { opacity: 1; }
 
-/* leaderboard style */
 .tab-buttons { display: flex; gap: 6px; margin-bottom: 10px; }
 .tab-btn {
   flex: 1;
@@ -173,7 +172,22 @@ function addHistory(value) {
   }
 }
 
-/* leaderboard */
+/* ===== ADD: SYNC POINTS FROM BACKEND ===== */
+async function syncPointsFromBackend() {
+  if (!wallet) return;
+  try {
+    const res = await fetch(BACKEND_URL + "/leaderboard?range=48h");
+    if (!res.ok) return;
+    const data = await res.json();
+    const me = data.find(u => u.wallet === wallet);
+    if (me && typeof me.points === "number") {
+      points = me.points;
+      savePoints();
+    }
+  } catch {}
+}
+/* ===== END ADD ===== */
+
 function switchTab(tab) {
   currentTab = tab;
   document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
@@ -208,7 +222,6 @@ async function loadLeaderboard() {
 setInterval(loadLeaderboard, 30000);
 loadLeaderboard();
 
-/* connect wallet */
 async function connectWallet() {
   const type = $("walletType").value;
   let detected = null;
@@ -228,12 +241,12 @@ async function connectWallet() {
     wallet = res.publicKey.toString();
     $("wallet").textContent = wallet.slice(0,4) + "..." + wallet.slice(-4);
     showToast("Wallet connected successfully!");
+    syncPointsFromBackend();
   } catch {
     showToast("Connection rejected");
   }
 }
 
-/* game */
 function genCrash() {
   const r = Math.random();
   return r < 0.6 ? 1 + Math.random() * 0.5 :
@@ -271,12 +284,20 @@ function startRound() {
       running = false;
       $("stopBtn").disabled = true;
       addHistory(crashPoint);
+
+      if (!exited && wallet) {
+        fetch(BACKEND_URL + "/game/result", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ wallet, profit: 0, volume: bet })
+        }).then(syncPointsFromBackend).catch(() => {});
+      }
+
       if (!exited) showToast(`Crashed at ${crashPoint.toFixed(2)}x – Lost ${bet} points`);
     }
   }, 30);
 }
 
-/* ===== CHỈ FIX DUY NHẤT Ở ĐÂY ===== */
 async function cashout() {
   if (!running || exited) return;
   exited = true;
@@ -291,20 +312,15 @@ async function cashout() {
       await fetch(BACKEND_URL + "/game/result", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          wallet,
-          profit: win,
-          volume: bet
-        })
+        body: JSON.stringify({ wallet, profit: win, volume: bet })
       });
+      syncPointsFromBackend();
     }
   } catch {}
 
   showToast(`Cashed out at ${multiplier.toFixed(2)}x → +${win} points!`);
 }
-/* ===== HẾT FIX ===== */
 
-/* deposit */
 async function depositSOL() {
   if (!provider) return showToast("Please connect wallet first");
   const btn = $("depositBtn");
@@ -350,6 +366,7 @@ async function depositSOL() {
     if (data.ok && data.addedPoint > 0) {
       points += data.addedPoint;
       savePoints();
+      syncPointsFromBackend();
       showToast(`Deposit success! +${data.addedPoint} points`);
     } else {
       showToast("SOL sent – points will update soon");
@@ -364,5 +381,62 @@ async function depositSOL() {
   }
 }
 </script>
+
+<!-- ===== ANTI CHEAT ADD – COPIED 100% VERBATIM ===== -->
+<script>
+/* ===== ANTI CHEAT ADD (ONLY ADD – NO MODIFY ABOVE) ===== */
+(function () {
+  let lastActionTime = 0;
+  let locked = false;
+  let snapshotPoints = points;
+
+  function lock(reason) {
+    locked = true;
+    showToast("Cheat detected");
+    console.warn("ANTI CHEAT:", reason);
+  }
+
+  /* Detect manual points tampering */
+  setInterval(() => {
+    if (points !== snapshotPoints) {
+      lock("POINTS_MODIFIED");
+    }
+    snapshotPoints = points;
+  }, 500);
+
+  /* Wrap startRound */
+  const _startRound = window.startRound;
+  window.startRound = function () {
+    if (locked) return;
+    const now = Date.now();
+    if (now - lastActionTime < 400) {
+      lock("SPAM_START");
+      return;
+    }
+    lastActionTime = now;
+    return _startRound.apply(this, arguments);
+  };
+
+  /* Wrap cashout */
+  const _cashout = window.cashout;
+  window.cashout = function () {
+    if (locked) return;
+    if (!running) {
+      lock("CASHOUT_WHEN_NOT_RUNNING");
+      return;
+    }
+    return _cashout.apply(this, arguments);
+  };
+
+  /* Block console tampering */
+  Object.defineProperty(window, "points", {
+    configurable: false,
+    writable: false
+  });
+
+})();
+ /* ===== END ANTI CHEAT ADD ===== */
+</script>
+
 </body>
   </html>
