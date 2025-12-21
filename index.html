@@ -11,12 +11,12 @@
 body {
   background: radial-gradient(circle at top, #0b1a3a, #050814);
   color: #fff;
-  font-family: Arial;
+  font-family: Arial, sans-serif;
   margin: 0;
 }
 .container { max-width: 420px; margin: auto; padding: 16px; }
 .card { background: #0c1635; border-radius: 14px; padding: 16px; margin-bottom: 14px; }
-.multiplier { font-size: 56px; font-weight: bold; text-align: center; }
+.multiplier { font-size: 56px; font-weight: bold; text-align: center; margin: 10px 0; }
 button {
   width: 100%;
   padding: 14px;
@@ -26,176 +26,292 @@ button {
   font-size: 18px;
   font-weight: bold;
   margin-top: 6px;
+  cursor: pointer;
 }
 button.stop { background: #222; color: #999; }
+button:disabled { opacity: 0.6; cursor: not-allowed; }
 input, select {
   width: 100%;
   padding: 12px;
   border-radius: 10px;
   border: none;
   margin-bottom: 8px;
+  box-sizing: border-box;
 }
-.history { display: flex; gap: 6px; overflow-x: auto; }
-.history span { background: #15245a; padding: 6px 10px; border-radius: 8px; }
-.warn { color: #ff5a5a; font-size: 14px; }
+.history { display: flex; gap: 6px; overflow-x: auto; padding: 8px 0; }
+.history span {
+  background: #15245a;
+  padding: 6px 12px;
+  border-radius: 8px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.warn { color: #ff5a5a; font-size: 14px; text-align: center; min-height: 20px; }
+.toast {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1e2a5a;
+  color: #2cffb3;
+  padding: 12px 24px;
+  border-radius: 12px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  z-index: 100;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.toast.show { opacity: 1; }
 </style>
 </head>
 
 <body>
 <div class="container">
-<h2>🚀 Solspace</h2>
+  <h2>🚀 Solspace</h2>
 
-<!-- CONNECT WALLET (STEP A) -->
-<div class="card">
-  <select id="walletType">
-    <option value="phantom">Phantom</option>
-    <option value="solflare">Solflare</option>
-    <option value="backpack">Backpack</option>
-  </select>
-  <button onclick="connectWallet()">Connect Wallet</button>
-  <div id="wallet"></div>
+  <!-- CONNECT WALLET -->
+  <div class="card">
+    <select id="walletType">
+      <option value="phantom">Phantom</option>
+      <option value="solflare">Solflare</option>
+      <option value="backpack">Backpack</option>
+    </select>
+    <button onclick="connectWallet()">Connect Wallet</button>
+    <div id="wallet" style="margin-top:8px; word-break:break-all;"></div>
+  </div>
+
+  <!-- HISTORY -->
+  <div class="card">
+    <div class="history" id="history"></div>
+  </div>
+
+  <!-- GAME -->
+  <div class="card">
+    <div class="multiplier" id="display">1.00x</div>
+    <input id="bet" type="number" placeholder="Bet Points" min="1">
+    <input id="auto" type="number" step="0.01" placeholder="Auto Cashout (optional)">
+    <div id="warn" class="warn"></div>
+    <button onclick="startRound()">START</button>
+    <button class="stop" id="stopBtn" onclick="cashout()" disabled>STOP</button>
+    <p>Your Points: <b id="points">0</b></p>
+  </div>
+
+  <!-- DEPOSIT -->
+  <div class="card">
+    <input id="depositAmount" type="number" step="0.001" placeholder="SOL amount (>= 0.005)" min="0.005">
+    <button id="depositBtn" onclick="depositSOL()">DEPOSIT SOL</button>
+  </div>
 </div>
 
-<!-- HISTORY -->
-<div class="card">
-  <div class="history" id="history"></div>
-</div>
-
-<!-- GAME (GIỮ NGUYÊN) -->
-<div class="card">
-  <div class="multiplier" id="display">1.00x</div>
-
-  <input id="bet" type="number" placeholder="Bet Points">
-  <input id="auto" type="number" step="0.01" placeholder="Auto Cashout">
-
-  <div id="warn" class="warn"></div>
-
-  <button onclick="startRound()">START</button>
-  <button class="stop" id="stopBtn" onclick="cashout()" disabled>STOP</button>
-
-  <p>Your Points: <b id="points">0</b></p>
-</div>
-
-<!-- DEPOSIT (CHƯA ĐỘNG) -->
-<div class="card">
-  <input id="depositAmount" type="number" step="0.001" placeholder="SOL amount (>= 0.005)">
-  <button onclick="depositSOL()">DEPOSIT SOL</button>
-</div>
-</div>
+<div id="toast" class="toast"></div>
 
 <script>
-/* ================= DOM ELEMENTS (FIX LỖI BIẾN) ================= */
-const betInput   = document.getElementById("bet");
-const autoInput  = document.getElementById("auto");
-const warn       = document.getElementById("warn");
-const display    = document.getElementById("display");
-const stopBtn    = document.getElementById("stopBtn");
-const history    = document.getElementById("history");
-const pointsEl   = document.getElementById("points");
+/* ===== CONFIG ===== */
+const BACKEND_URL = "https://solspace-backend-i089.onrender.com";
+const SYSTEM_WALLET = new solanaWeb3.PublicKey(
+  "H2yVMrEbexHFdsAMFQtBY3Lp3BBz6cu6VVJwyiommqxZ"
+);
 
-/* ================= STEP A: CONNECT WALLET ================= */
+/* ===== DOM ===== */
+const $ = id => document.getElementById(id);
+const betInput   = $("bet");
+const autoInput  = $("auto");
+const warn       = $("warn");
+const display    = $("display");
+const stopBtn    = $("stopBtn");
+const history    = $("history");
+const pointsEl   = $("points");
+const depositBtn = $("depositBtn");
+const toast      = $("toast");
 
+/* ===== STATE ===== */
 let provider = null;
-let wallet = null;
-
-function isMobile(){
-  return /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
-}
-
-async function connectWallet(){
-  const type = document.getElementById("walletType").value;
-  provider = null;
-
-  // 1️⃣ DESKTOP EXTENSION
-  if (type === "phantom" && window.solana?.isPhantom) provider = window.solana;
-  if (type === "solflare" && window.solflare?.isSolflare) provider = window.solflare;
-  if (type === "backpack" && window.backpack?.isBackpack) provider = window.backpack;
-
-  if (provider) {
-    try {
-      const res = await provider.connect();
-      wallet = res.publicKey.toString();
-      document.getElementById("wallet").innerText =
-        wallet.slice(0,4) + "..." + wallet.slice(-4);
-      return;
-    } catch {
-      alert("Wallet connection rejected");
-      return;
-    }
-  }
-
-  // 2️⃣ MOBILE DEEPLINK
-  if (isMobile()) {
-    const url = encodeURIComponent(location.href);
-    if (type === "phantom") location.href = `https://phantom.app/ul/browse/${url}`;
-    if (type === "solflare") location.href = `https://solflare.com/ul/browse/${url}`;
-    if (type === "backpack") location.href = `https://backpack.app/ul/browse/${url}`;
-    return;
-  }
-
-  alert("Wallet not detected. Install wallet or open in wallet browser.");
-}
-
-/* ================= PHẦN DƯỚI GIỮ NGUYÊN (CHỈ FIX BIẾN DOM) ================= */
-
-/* GAME STATE */
-let points = Number(localStorage.getItem("points")) || 0;
+let wallet   = null;
+let points   = Number(localStorage.getItem("points")) || 0;
 pointsEl.innerText = points;
 
-let running=false, exited=false, bet=0, auto=null, multiplier=1;
+let running = false, exited = false, bet = 0, auto = null, multiplier = 1;
 
-function savePoints(){
+/* ===== UTILS ===== */
+function savePoints() {
   localStorage.setItem("points", points);
   pointsEl.innerText = points;
 }
 
-function genCrash(){
-  const r=Math.random();
-  if(r<0.6) return 1+Math.random()*0.5;
-  if(r<0.85) return 1.5+Math.random()*1.5;
-  return 3+Math.random()*6;
+function showToast(msg, duration = 3000) {
+  toast.textContent = msg;
+  toast.classList.add("show");
+  setTimeout(() => toast.classList.remove("show"), duration);
 }
 
-function startRound(){
-  if(running) return;
-  bet=+betInput.value;
-  auto=+autoInput.value||null;
-  if(!bet||bet>points){ warn.innerText="Not enough points"; return; }
-  warn.innerText="";
-  points-=bet; savePoints();
-  multiplier=1; exited=false; running=true;
-  stopBtn.disabled=false;
-  const crash=genCrash();
-  const loop=setInterval(()=>{
-    if(!running){clearInterval(loop);return;}
-    multiplier+=0.03;
-    display.innerText=multiplier.toFixed(2)+"x";
-    if(auto && multiplier>=auto && !exited) cashout();
-    if(multiplier>=crash){
-      running=false;
-      stopBtn.disabled=true;
+function isMobile() {
+  return /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+}
+
+function addHistory(v) {
+  const span = document.createElement("span");
+  span.textContent = v.toFixed(2) + "x";
+  history.prepend(span);
+  if (history.children.length > 30) history.removeChild(history.lastChild);
+}
+
+/* ===== CONNECT WALLET ===== */
+async function connectWallet() {
+  const type = $("walletType").value;
+  let detected = null;
+
+  if (type === "phantom" && window.solana?.isPhantom) detected = window.solana;
+  else if (type === "solflare" && window.solflare?.isSolflare) detected = window.solflare;
+  else if (type === "backpack" && window.backpack?.isBackpack) detected = window.backpack;
+
+  if (detected) {
+    try { await detected.connect({ onlyIfTrusted: true }); } catch {}
+    if (!detected.isConnected) {
+      try { await detected.connect(); } catch {
+        showToast("Connection rejected");
+        return;
+      }
+    }
+    provider = detected;
+    wallet = detected.publicKey.toString();
+    $("wallet").textContent = wallet.slice(0,4) + "..." + wallet.slice(-4);
+    showToast("Wallet connected");
+    return;
+  }
+
+  if (isMobile()) {
+    const url = encodeURIComponent(location.href);
+    const links = {
+      phantom: `https://phantom.app/ul/browse/${url}?ref=solspace`,
+      solflare: `https://solflare.com/ul/browse/${url}`,
+      backpack: `https://backpack.app/ul/browse/${url}`
+    };
+    location.href = links[type];
+    return;
+  }
+
+  showToast("Wallet not detected");
+}
+
+/* ===== GAME ===== */
+function genCrash() {
+  const r = Math.random();
+  return r < 0.6 ? 1 + Math.random() * 0.5 :
+         r < 0.85 ? 1.5 + Math.random() * 1.5 : 3 + Math.random() * 6;
+}
+
+function startRound() {
+  if (running) return;
+  bet = +betInput.value;
+  auto = +autoInput.value || null;
+
+  if (!bet || bet <= 0 || bet > points) {
+    warn.textContent = "Invalid bet or not enough points";
+    return;
+  }
+
+  warn.textContent = "";
+  points -= bet;
+  savePoints();
+
+  multiplier = 1;
+  running = true;
+  exited = false;
+  stopBtn.disabled = false;
+  display.textContent = "1.00x";
+
+  betInput.value = "";
+  autoInput.value = "";
+
+  const crash = genCrash();
+  const loop = setInterval(() => {
+    if (!running) { clearInterval(loop); return; }
+    multiplier += 0.03;
+    display.textContent = multiplier.toFixed(2) + "x";
+
+    if (auto && multiplier >= auto && !exited) cashout();
+
+    if (multiplier >= crash) {
+      clearInterval(loop);
+      running = false;
+      stopBtn.disabled = true;
       addHistory(crash);
     }
-  },30);
+  }, 30);
 }
 
-function cashout(){
-  if(!running||exited) return;
-  exited=true;
-  points+=Math.floor(bet*multiplier);
+function cashout() {
+  if (!running || exited) return;
+  exited = true;
+  const win = Math.floor(bet * multiplier);
+  points += win;
   savePoints();
-  stopBtn.disabled=true;
+  stopBtn.disabled = true;
+  showToast(`Cashed out at ${multiplier.toFixed(2)}x → +${win} points`);
 }
 
-function addHistory(v){
-  const s=document.createElement("span");
-  s.innerText=v.toFixed(2)+"x";
-  history.prepend(s);
-}
+/* ===== DEPOSIT SOL ===== */
+async function depositSOL() {
+  if (!provider) return showToast("Please connect wallet first");
 
-function depositSOL(){
-  alert("Deposit: sẽ làm ở bước sau");
+  const originalText = depositBtn.textContent;
+  depositBtn.disabled = true;
+  depositBtn.textContent = "Depositing...";
+
+  try {
+    try { await provider.connect({ onlyIfTrusted: true }); }
+    catch { await provider.connect(); }
+
+    const sol = Number($("depositAmount").value);
+    if (isNaN(sol) || sol < 0.005) {
+      showToast("Minimum 0.005 SOL");
+      return;
+    }
+
+    const conn = new solanaWeb3.Connection(
+      solanaWeb3.clusterApiUrl("mainnet-beta"),
+      "confirmed"
+    );
+    const from = provider.publicKey;
+
+    const tx = new solanaWeb3.Transaction().add(
+      solanaWeb3.SystemProgram.transfer({
+        fromPubkey: from,
+        toPubkey: SYSTEM_WALLET,
+        lamports: Math.floor(sol * solanaWeb3.LAMPORTS_PER_SOL)
+      })
+    );
+
+    tx.feePayer = from;
+    tx.recentBlockhash = (await conn.getLatestBlockhash()).blockhash;
+
+    const { signature } = await provider.signAndSendTransaction(tx);
+    await conn.confirmTransaction(signature, "confirmed");
+
+    const res = await fetch(BACKEND_URL + "/check-deposit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ wallet: from.toString() })
+    });
+    const data = await res.json();
+
+    if (data.ok && data.addedPoint > 0) {
+      points += data.addedPoint;
+      savePoints();
+      showToast(`Deposit success +${data.addedPoint} points`);
+    } else {
+      showToast("SOL sent – points updating soon");
+    }
+
+    $("depositAmount").value = "";
+  } catch (e) {
+    console.error(e);
+    showToast("Transaction cancelled or failed");
+  } finally {
+    depositBtn.disabled = false;
+    depositBtn.textContent = originalText;
+  }
 }
 </script>
 </body>
-</html>
+  </html>
