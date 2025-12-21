@@ -1,96 +1,368 @@
-<!-- (PHẦN TRÊN GIỮ NGUYÊN 100%, TAO KHÔNG ĐỤNG) -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Solspace</title>
+
+<script src="https://unpkg.com/@solana/web3.js@latest/lib/index.iife.min.js"></script>
+
+<style>
+body {
+  background: radial-gradient(circle at top, #0b1a3a, #050814);
+  color: #fff;
+  font-family: Arial, sans-serif;
+  margin: 0;
+}
+.container { max-width: 420px; margin: auto; padding: 16px; }
+.card { background: #0c1635; border-radius: 14px; padding: 16px; margin-bottom: 14px; }
+.multiplier { font-size: 56px; font-weight: bold; text-align: center; margin: 15px 0; }
+button {
+  width: 100%;
+  padding: 14px;
+  border-radius: 12px;
+  border: none;
+  background: #2cffb3;
+  font-size: 18px;
+  font-weight: bold;
+  margin-top: 6px;
+  cursor: pointer;
+}
+button.stop { background: #222; color: #999; }
+button:disabled { opacity: 0.6; cursor: not-allowed; }
+input, select {
+  width: 100%;
+  padding: 12px;
+  border-radius: 10px;
+  border: none;
+  margin-bottom: 8px;
+  box-sizing: border-box;
+}
+.history { display: flex; gap: 6px; overflow-x: auto; padding: 8px 0; }
+.history span { background: #15245a; padding: 6px 12px; border-radius: 8px; white-space: nowrap; flex-shrink: 0; }
+.warn { color: #ff5a5a; font-size: 14px; text-align: center; min-height: 20px; }
+.toast {
+  position: fixed;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1e2a5a;
+  color: #2cffb3;
+  padding: 14px 28px;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+  z-index: 1000;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  font-weight: bold;
+}
+.toast.show { opacity: 1; }
+
+/* leaderboard style */
+.tab-buttons { display: flex; gap: 6px; margin-bottom: 10px; }
+.tab-btn {
+  flex: 1;
+  padding: 10px;
+  background: #15245a;
+  border: none;
+  color: #aaa;
+  font-size: 14px;
+  cursor: pointer;
+  border-radius: 8px;
+}
+.tab-btn.active {
+  background: #2cffb3;
+  color: #000;
+  font-weight: bold;
+}
+table { width: 100%; font-size: 14px; border-collapse: collapse; }
+th, td { padding: 6px 4px; }
+th { color: #2cffb3; }
+td:last-child { text-align: right; }
+</style>
+</head>
+
+<body>
+<div class="container">
+  <h2>🚀 Solspace</h2>
+
+  <div class="card">
+    <select id="walletType">
+      <option value="phantom">Phantom</option>
+      <option value="solflare">Solflare</option>
+      <option value="backpack">Backpack</option>
+    </select>
+    <button onclick="connectWallet()">Connect Wallet</button>
+    <div id="wallet" style="margin-top:8px; word-break:break-all; font-size:14px;"></div>
+  </div>
+
+  <div class="card">
+    <div class="history" id="history"></div>
+  </div>
+
+  <div class="card">
+    <div class="multiplier" id="display">1.00x</div>
+    <input id="bet" type="number" min="1" step="1" placeholder="Bet Points">
+    <input id="auto" type="number" min="1.01" step="0.01" placeholder="Auto Cashout (optional)">
+    <div id="warn" class="warn"></div>
+    <button onclick="startRound()">START</button>
+    <button class="stop" id="stopBtn" onclick="cashout()" disabled>STOP</button>
+    <p>Your Points: <b id="points">0</b></p>
+  </div>
+
+  <div class="card">
+    <input id="depositAmount" type="number" min="0.005" step="0.001" placeholder="SOL amount (>= 0.005)">
+    <button id="depositBtn" onclick="depositSOL()">DEPOSIT SOL</button>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0">🏆 Leaderboard</h3>
+    <div class="tab-buttons">
+      <button class="tab-btn active" onclick="switchTab('48h')">48H</button>
+      <button class="tab-btn" onclick="switchTab('final')">Season</button>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Wallet</th>
+          <th>Score</th>
+        </tr>
+      </thead>
+      <tbody id="leaderboardBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
 
 <script>
-/* ===== ADD: FRONTEND ANTI-CHEAT STATE ===== */
-let lastActionTime = 0;
+const BACKEND_URL = "https://solspace-backend-i089.onrender.com";
+const SYSTEM_WALLET = new solanaWeb3.PublicKey("H2yVMrEbexHFdsAMFQtBY3Lp3BBz6cu6VVJwyiommqxZ");
 
-/* ===== ADD: SYNC POINTS FROM BACKEND ===== */
-async function syncPointsFromBackend(){
-  if(!wallet) return;
-  try{
-    const res = await fetch(BACKEND_URL + "/leaderboard?range=48h");
-    if(!res.ok) return;
+const $ = id => document.getElementById(id);
+const toast = $("toast");
+let toastTimeout = null;
+
+let provider = null;
+let wallet = null;
+let points = Number(localStorage.getItem("points")) || 0;
+$("points").innerText = points;
+
+let running = false, exited = false, bet = 0, auto = null, multiplier = 1;
+let currentTab = "48h";
+
+function savePoints() {
+  localStorage.setItem("points", points);
+  $("points").innerText = points;
+}
+
+function showToast(msg, duration = 3500) {
+  clearTimeout(toastTimeout);
+  toast.textContent = msg;
+  toast.classList.add("show");
+  toastTimeout = setTimeout(() => toast.classList.remove("show"), duration);
+}
+
+function addHistory(value) {
+  const span = document.createElement("span");
+  span.textContent = value.toFixed(2) + "x";
+  $("history").prepend(span);
+  if ($("history").children.length > 30) {
+    $("history").removeChild($("history").lastChild);
+  }
+}
+
+/* leaderboard */
+function switchTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+  document.querySelector(`.tab-btn[onclick="switchTab('${tab}')"]`).classList.add("active");
+  loadLeaderboard();
+}
+
+async function loadLeaderboard() {
+  try {
+    const url = currentTab === "final"
+      ? BACKEND_URL + "/leaderboard/final"
+      : BACKEND_URL + "/leaderboard?range=48h";
+
+    const res = await fetch(url);
+    if (!res.ok) return;
     const data = await res.json();
-    const me = data.find(u => u.wallet === wallet);
-    if(me && typeof me.points === "number"){
-      points = me.points;
-      savePoints();
-    }
-  }catch{}
-}
 
-/* ===== ADD: SAFE SEND GAME RESULT ===== */
-async function sendGameResult(profit, volume){
-  if(!wallet) return;
-  try{
-    await fetch(BACKEND_URL + "/game/result",{
-      method:"POST",
-      headers:{ "Content-Type":"application/json" },
-      body:JSON.stringify({ wallet, profit, volume })
+    const body = $("leaderboardBody");
+    body.innerHTML = "";
+    data.forEach((u, i) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${u.rank || i + 1}</td>
+        <td>${u.wallet.slice(0,4)}...${u.wallet.slice(-4)}</td>
+        <td>${(currentTab === "final" ? u.finalScore : u.score).toFixed(3)}</td>
+      `;
+      body.appendChild(tr);
     });
-  }catch{}
+  } catch {}
 }
 
-/* ===== GAME (CHỈ BỔ SUNG, KHÔNG SỬA LOGIC CŨ) ===== */
-function startRound(){
-  const now = Date.now();
+setInterval(loadLeaderboard, 30000);
+loadLeaderboard();
 
-  /* === ADD: ANTI-SPAM CLICK === */
-  if(now - lastActionTime < 500){
-    showToast("Too fast");
+/* connect wallet */
+async function connectWallet() {
+  const type = $("walletType").value;
+  let detected = null;
+
+  if (type === "phantom" && window.solana?.isPhantom) detected = window.solana;
+  else if (type === "solflare" && window.solflare?.isSolflare) detected = window.solflare;
+  else if (type === "backpack" && window.backpack?.isBackpack) detected = window.backpack;
+
+  if (!detected) {
+    showToast("Wallet not detected");
     return;
   }
-  lastActionTime = now;
 
-  /* === ADD: REQUIRE WALLET === */
-  if(!wallet){
-    showToast("Connect wallet first");
+  try {
+    const res = await detected.connect();
+    provider = detected;
+    wallet = res.publicKey.toString();
+    $("wallet").textContent = wallet.slice(0,4) + "..." + wallet.slice(-4);
+    showToast("Wallet connected successfully!");
+  } catch {
+    showToast("Connection rejected");
+  }
+}
+
+/* game */
+function genCrash() {
+  const r = Math.random();
+  return r < 0.6 ? 1 + Math.random() * 0.5 :
+         r < 0.85 ? 1.5 + Math.random() * 1.5 : 3 + Math.random() * 6;
+}
+
+function startRound() {
+  if (running) return;
+  bet = +$("bet").value;
+  auto = +$("auto").value || null;
+
+  if (!bet || bet < 1 || bet > points) {
+    $("warn").textContent = "Invalid bet or not enough points";
     return;
   }
 
-  if(running)return;
-  bet=+$("bet").value; auto=+$("auto").value||null;
-  if(!bet||bet<1||bet>points){$("warn").textContent="Invalid bet";return;}
-  $("warn").textContent="";
-  points-=bet; savePoints();
-  multiplier=1;running=true;exited=false;
-  $("stopBtn").disabled=false; $("display").textContent="1.00x";
-  $("bet").value=""; $("auto").value="";
-  const crash=genCrash();
+  $("warn").textContent = "";
+  points -= bet;
+  savePoints();
 
-  const loop=setInterval(()=>{
-    if(!running){clearInterval(loop);return;}
-    multiplier+=0.03;
-    $("display").textContent=multiplier.toFixed(2)+"x";
-    if(auto && multiplier>=auto && !exited) cashout();
+  multiplier = 1; running = true; exited = false;
+  $("stopBtn").disabled = false;
+  $("display").textContent = "1.00x";
+  $("bet").value = "";
+  $("auto").value = "";
 
-    if(multiplier>=crash){
+  const crashPoint = genCrash();
+  const loop = setInterval(() => {
+    if (!running) { clearInterval(loop); return; }
+    multiplier += 0.03;
+    $("display").textContent = multiplier.toFixed(2) + "x";
+    if (auto && multiplier >= auto && !exited) cashout();
+    if (multiplier >= crashPoint) {
       clearInterval(loop);
-      running=false;
-      $("stopBtn").disabled=true;
-      addHistory(crash);
-
-      /* === ADD: SEND LOSS RESULT === */
-      if(!exited){
-        sendGameResult(0, bet);
-        syncPointsFromBackend();
-        showToast(`Crashed at ${crash.toFixed(2)}x`);
-      }
+      running = false;
+      $("stopBtn").disabled = true;
+      addHistory(crashPoint);
+      if (!exited) showToast(`Crashed at ${crashPoint.toFixed(2)}x – Lost ${bet} points`);
     }
-  },30);
+  }, 30);
 }
 
-function cashout(){
-  if(!running||exited)return;
-  exited=true;
+/* ===== CHỈ FIX DUY NHẤT Ở ĐÂY ===== */
+async function cashout() {
+  if (!running || exited) return;
+  exited = true;
 
-  const win=Math.floor(bet*multiplier);
-  points+=win; savePoints();
-  $("stopBtn").disabled=true;
+  const win = Math.floor(bet * multiplier);
+  points += win;
+  savePoints();
+  $("stopBtn").disabled = true;
 
-  /* === ADD: SEND WIN RESULT === */
-  sendGameResult(win, bet).then(syncPointsFromBackend);
+  try {
+    if (wallet) {
+      await fetch(BACKEND_URL + "/game/result", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          wallet,
+          profit: win,
+          volume: bet
+        })
+      });
+    }
+  } catch {}
 
-  showToast(`+${win} points`);
+  showToast(`Cashed out at ${multiplier.toFixed(2)}x → +${win} points!`);
+}
+/* ===== HẾT FIX ===== */
+
+/* deposit */
+async function depositSOL() {
+  if (!provider) return showToast("Please connect wallet first");
+  const btn = $("depositBtn");
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Depositing...";
+
+  try {
+    const sol = Number($("depositAmount").value);
+    if (isNaN(sol) || sol < 0.005) {
+      showToast("Minimum 0.005 SOL");
+      return;
+    }
+
+    const conn = new solanaWeb3.Connection(
+      solanaWeb3.clusterApiUrl("mainnet-beta"),
+      "confirmed"
+    );
+    const from = provider.publicKey;
+
+    const tx = new solanaWeb3.Transaction().add(
+      solanaWeb3.SystemProgram.transfer({
+        fromPubkey: from,
+        toPubkey: SYSTEM_WALLET,
+        lamports: Math.floor(sol * solanaWeb3.LAMPORTS_PER_SOL)
+      })
+    );
+
+    tx.feePayer = from;
+    const { blockhash } = await conn.getLatestBlockhash();
+    tx.recentBlockhash = blockhash;
+
+    const { signature } = await provider.signAndSendTransaction(tx);
+    await conn.confirmTransaction(signature, "confirmed");
+
+    const res = await fetch(BACKEND_URL + "/check-deposit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ wallet: from.toString() })
+    });
+    const data = await res.json();
+
+    if (data.ok && data.addedPoint > 0) {
+      points += data.addedPoint;
+      savePoints();
+      showToast(`Deposit success! +${data.addedPoint} points`);
+    } else {
+      showToast("SOL sent – points will update soon");
+    }
+
+    $("depositAmount").value = "";
+  } catch {
+    showToast("Transaction cancelled or failed");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
 }
 </script>
+</body>
+  </html>
