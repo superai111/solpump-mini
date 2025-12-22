@@ -381,62 +381,107 @@ async function depositSOL() {
   }
 }
 </script>
-
-<!-- ===== ANTI CHEAT ADD – COPIED 100% VERBATIM ===== -->
+  <!-- ===== ANTI CHEAT SAFE MODE – ONLY OBSERVE, NO BLOCK ===== -->
 <script>
-/* ===== ANTI CHEAT ADD (ONLY ADD – NO MODIFY ABOVE) ===== */
 (function () {
-  let lastActionTime = 0;
-  let locked = false;
-  let snapshotPoints = points;
+  let lastStartTime = 0;
+  let lastCashoutTime = 0;
+  let lastPoints = points;<!-- ===== ANTI CHEAT SAFE MODE – ONLY OBSERVE, NO BLOCK ===== -->
+<script>
+(function () {
+  let lastStartTime = 0;
+  let lastCashoutTime = 0;
+  let lastPoints = points;
 
-  function lock(reason) {
-    locked = true;
-    showToast("Cheat detected");
-    console.warn("ANTI CHEAT:", reason);
+  function flag(reason, extra = {}) {
+    console.warn("[ANTI CHEAT FLAG]", reason, extra);
+    // SAFE MODE: chỉ cảnh báo, KHÔNG khóa game
+    showToast("Suspicious activity detected", 2000);
   }
 
-  /* Detect manual points tampering */
+  /* Detect abnormal points jump */
   setInterval(() => {
-    if (points !== snapshotPoints) {
-      lock("POINTS_MODIFIED");
+    const diff = points - lastPoints;
+
+    // điểm thay đổi quá lớn trong thời gian ngắn (ví dụ > 1e6)
+    if (Math.abs(diff) > 1_000_000) {
+      flag("ABNORMAL_POINTS_CHANGE", { diff });
     }
-    snapshotPoints = points;
+
+    lastPoints = points;
   }, 500);
 
-  /* Wrap startRound */
+  /* Monitor start spam (but not block) */
   const _startRound = window.startRound;
   window.startRound = function () {
-    if (locked) return;
     const now = Date.now();
-    if (now - lastActionTime < 400) {
-      lock("SPAM_START");
-      return;
+    if (now - lastStartTime < 300) {
+      flag("START_SPAM", { delta: now - lastStartTime });
     }
-    lastActionTime = now;
+    lastStartTime = now;
     return _startRound.apply(this, arguments);
   };
 
-  /* Wrap cashout */
+  /* Monitor invalid cashout */
   const _cashout = window.cashout;
   window.cashout = function () {
-    if (locked) return;
     if (!running) {
-      lock("CASHOUT_WHEN_NOT_RUNNING");
-      return;
+      flag("CASHOUT_WHEN_NOT_RUNNING");
     }
+    const now = Date.now();
+    if (now - lastCashoutTime < 200) {
+      flag("CASHOUT_SPAM", { delta: now - lastCashoutTime });
+    }
+    lastCashoutTime = now;
     return _cashout.apply(this, arguments);
   };
 
-  /* Block console tampering */
-  Object.defineProperty(window, "points", {
-    configurable: false,
-    writable: false
-  });
+})();
+</script>
+<!-- ===== END ANTI CHEAT SAFE MODE ===== -->
+    // SAFE MODE: chỉ cảnh báo, KHÔNG khóa game
+    showToast("Suspicious activity detected", 2000);
+  }
+
+  /* Detect abnormal points jump */
+  setInterval(() => {
+    const diff = points - lastPoints;
+
+    // điểm thay đổi quá lớn trong thời gian ngắn (ví dụ > 1e6)
+    if (Math.abs(diff) > 1_000_000) {
+      flag("ABNORMAL_POINTS_CHANGE", { diff });
+    }
+
+    lastPoints = points;
+  }, 500);
+
+  /* Monitor start spam (but not block) */
+  const _startRound = window.startRound;
+  window.startRound = function () {
+    const now = Date.now();
+    if (now - lastStartTime < 300) {
+      flag("START_SPAM", { delta: now - lastStartTime });
+    }
+    lastStartTime = now;
+    return _startRound.apply(this, arguments);
+  };
+
+  /* Monitor invalid cashout */
+  const _cashout = window.cashout;
+  window.cashout = function () {
+    if (!running) {
+      flag("CASHOUT_WHEN_NOT_RUNNING");
+    }
+    const now = Date.now();
+    if (now - lastCashoutTime < 200) {
+      flag("CASHOUT_SPAM", { delta: now - lastCashoutTime });
+    }
+    lastCashoutTime = now;
+    return _cashout.apply(this, arguments);
+  };
 
 })();
- /* ===== END ANTI CHEAT ADD ===== */
 </script>
-
+<!-- ===== END ANTI CHEAT SAFE MODE ===== --
 </body>
   </html>
