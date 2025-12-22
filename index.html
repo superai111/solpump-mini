@@ -381,12 +381,8 @@ async function depositSOL() {
   }
 }
 </script>
-  <!-- ===== ANTI CHEAT SAFE MODE – ONLY OBSERVE, NO BLOCK ===== -->
-<script>
-(function () {
-  let lastStartTime = 0;
-  let lastCashoutTime = 0;
-  let lastPoints = points;<!-- ===== ANTI CHEAT SAFE MODE – ONLY OBSERVE, NO BLOCK ===== -->
+
+<!-- ===== ANTI CHEAT SAFE MODE – ONLY OBSERVE, NO BLOCK ===== -->
 <script>
 (function () {
   let lastStartTime = 0;
@@ -395,23 +391,17 @@ async function depositSOL() {
 
   function flag(reason, extra = {}) {
     console.warn("[ANTI CHEAT FLAG]", reason, extra);
-    // SAFE MODE: chỉ cảnh báo, KHÔNG khóa game
     showToast("Suspicious activity detected", 2000);
   }
 
-  /* Detect abnormal points jump */
   setInterval(() => {
     const diff = points - lastPoints;
-
-    // điểm thay đổi quá lớn trong thời gian ngắn (ví dụ > 1e6)
     if (Math.abs(diff) > 1_000_000) {
       flag("ABNORMAL_POINTS_CHANGE", { diff });
     }
-
     lastPoints = points;
   }, 500);
 
-  /* Monitor start spam (but not block) */
   const _startRound = window.startRound;
   window.startRound = function () {
     const now = Date.now();
@@ -422,7 +412,6 @@ async function depositSOL() {
     return _startRound.apply(this, arguments);
   };
 
-  /* Monitor invalid cashout */
   const _cashout = window.cashout;
   window.cashout = function () {
     if (!running) {
@@ -435,53 +424,9 @@ async function depositSOL() {
     lastCashoutTime = now;
     return _cashout.apply(this, arguments);
   };
-
 })();
 </script>
 <!-- ===== END ANTI CHEAT SAFE MODE ===== -->
-    // SAFE MODE: chỉ cảnh báo, KHÔNG khóa game
-    showToast("Suspicious activity detected", 2000);
-  }
 
-  /* Detect abnormal points jump */
-  setInterval(() => {
-    const diff = points - lastPoints;
-
-    // điểm thay đổi quá lớn trong thời gian ngắn (ví dụ > 1e6)
-    if (Math.abs(diff) > 1_000_000) {
-      flag("ABNORMAL_POINTS_CHANGE", { diff });
-    }
-
-    lastPoints = points;
-  }, 500);
-
-  /* Monitor start spam (but not block) */
-  const _startRound = window.startRound;
-  window.startRound = function () {
-    const now = Date.now();
-    if (now - lastStartTime < 300) {
-      flag("START_SPAM", { delta: now - lastStartTime });
-    }
-    lastStartTime = now;
-    return _startRound.apply(this, arguments);
-  };
-
-  /* Monitor invalid cashout */
-  const _cashout = window.cashout;
-  window.cashout = function () {
-    if (!running) {
-      flag("CASHOUT_WHEN_NOT_RUNNING");
-    }
-    const now = Date.now();
-    if (now - lastCashoutTime < 200) {
-      flag("CASHOUT_SPAM", { delta: now - lastCashoutTime });
-    }
-    lastCashoutTime = now;
-    return _cashout.apply(this, arguments);
-  };
-
-})();
-</script>
-<!-- ===== END ANTI CHEAT SAFE MODE ===== --
 </body>
-  </html>
+</html>
