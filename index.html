@@ -198,14 +198,13 @@ let toastTimeout = null;
 
 let provider = null;
 let wallet = null;
-let points = Number(localStorage.getItem("points")) || 0;
+let points = 0;
 $("points").innerText = points;
 
 let running = false, exited = false, bet = 0, auto = null, multiplier = 1;
 let currentTab = "48h";
 
 function savePoints() {
-  localStorage.setItem("points", points);
   $("points").innerText = points;
 }
 
