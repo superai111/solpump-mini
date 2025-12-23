@@ -275,6 +275,14 @@ setInterval(loadLeaderboard, 30000);
 loadLeaderboard();
 
 async function connectWallet() {
+
+  if (!window.solana) {
+    alert(
+      "Please open this game in Phantom / Solflare App (mobile) or install Phantom extension (PC)"
+    );
+    return;
+  }
+
   const type = $("walletType").value;
   let detected = null;
 
